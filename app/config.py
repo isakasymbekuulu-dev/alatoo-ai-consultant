@@ -9,9 +9,10 @@ class Settings(BaseSettings):
     github_models_base_url: str = "https://models.github.ai/inference"
     llm_model: str = "openai/gpt-4o-mini"
 
-    # Embeddings (via GitHub Models API — no local model)
-    embed_model: str = "openai/text-embedding-3-small"
-    embed_dim: int = 1536
+    # Embeddings. Local BGE-M3 by default (best ky/ru/en).
+    # For an API backend instead, set EMBED_MODEL=openai/text-embedding-3-small, EMBED_DIM=1536
+    embed_model: str = "BAAI/bge-m3"
+    embed_dim: int = 1024
 
     # Qdrant
     qdrant_url: str = "http://qdrant:6333"

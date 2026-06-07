@@ -8,8 +8,11 @@ python-multipart==0.0.20
 # Vector DB
 qdrant-client==1.12.2
 
-# LLM + embeddings via GitHub Models (OpenAI-compatible) — no local model
+# LLM via GitHub Models (OpenAI-compatible) + API-embeddings option
 openai==1.59.6
+
+# Local embeddings (BGE-M3, multilingual ru/ky/en)
+sentence-transformers==3.3.1
 
 # Ingestion: file parsing + chunking + text cleanup
 pypdf==5.1.0

@@ -19,8 +19,9 @@ AI-консультант Ала-Тоо Университета: абитури
 ## Стек
 - **FastAPI** — OpenAI-совместимый бэкенд с RAG
 - **Qdrant** — векторная БД (Docker volume → данные не теряются)
-- **GitHub Models** — LLM `openai/gpt-4o-mini` + эмбеддинги `openai/text-embedding-3-small`
-  (бесплатно по GitHub-токену, без локальной модели — подходит для 2 ГБ RAM)
+- **GitHub Models** — LLM `openai/gpt-4o-mini` (бесплатно по GitHub-токену)
+- **BGE-M3** — локальные мультиязычные эмбеддинги (ky/ru/en), dim 1024
+  (переключается на API `openai/text-embedding-3-small` одной строкой в `.env`)
 - **OpenWebUI** — фронт для сотрудников
 
 ## Структура
@@ -60,10 +61,13 @@ curl localhost:8000/healthz
 3. Вставить токен в `.env` как `GITHUB_TOKEN`
 
 ## Эмбеддинги
-Считаются через GitHub Models API (`openai/text-embedding-3-small`, dim 1536) —
-тем же токеном, что и LLM. Локальная модель не нужна, RAM не расходуется.
-Если позже захочется лучшее качество по кыргызскому и появится дроплет ≥4 ГБ —
-можно вернуть локальный BGE-M3 (см. историю в `docs/adr`).
+По умолчанию локальный **BGE-M3** (dim 1024, лучшее качество ky/ru/en),
+требует ~3-4 ГБ RAM. Если RAM мало — переключить на API в `.env`:
+```
+EMBED_MODEL=openai/text-embedding-3-small
+EMBED_DIM=1536
+```
+и заново прогнать ingestion с `--recreate`.
 
 ## Дальше (roadmap)
 RIASEC-тест (ветка LangGraph) · скрейпинг сайта (Bright Data) ·

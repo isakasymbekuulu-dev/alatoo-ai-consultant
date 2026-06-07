@@ -22,6 +22,7 @@ services:
       - "8000:8000"   # public chat page + OpenAI-compatible API
     volumes:
       - ./data:/app/data
+      - hf_cache:/root/.cache/huggingface   # cache BGE-M3 between restarts
     depends_on:
       qdrant:
         condition: service_started
@@ -43,3 +44,4 @@ services:
 volumes:
   qdrant_data:
   openwebui_data:
+  hf_cache:

@@ -1,0 +1,22 @@
+# Backend + ingestion (single image)
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+python-multipart==0.0.20
+
+# Vector DB
+qdrant-client==1.12.2
+
+# Embeddings (BGE-M3, multilingual ru/ky/en)
+sentence-transformers==3.3.1
+
+# LLM via GitHub Models (OpenAI-compatible)
+openai==1.59.6
+
+# Ingestion: file parsing + chunking + text cleanup
+pypdf==5.1.0
+python-docx==1.1.2
+langchain-text-splitters==0.3.4
+ftfy==6.3.1
+charset-normalizer==3.4.1

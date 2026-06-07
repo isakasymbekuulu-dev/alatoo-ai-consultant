@@ -19,8 +19,8 @@ AI-консультант Ала-Тоо Университета: абитури
 ## Стек
 - **FastAPI** — OpenAI-совместимый бэкенд с RAG
 - **Qdrant** — векторная БД (Docker volume → данные не теряются)
-- **BGE-M3** — мультиязычные эмбеддинги (ky/ru/en), локально на CPU
-- **GitHub Models** — LLM `openai/gpt-4o-mini` (бесплатно по GitHub Education)
+- **GitHub Models** — LLM `openai/gpt-4o-mini` + эмбеддинги `openai/text-embedding-3-small`
+  (бесплатно по GitHub-токену, без локальной модели — подходит для 2 ГБ RAM)
 - **OpenWebUI** — фронт для сотрудников
 
 ## Структура
@@ -59,13 +59,11 @@ curl localhost:8000/healthz
 2. Permissions → **Models: Read-only**
 3. Вставить токен в `.env` как `GITHUB_TOKEN`
 
-## Если на дроплете мало RAM
-BGE-M3 требует ~3–4 ГБ. Переключиться на лёгкую модель в `.env`:
-```
-EMBED_MODEL=intfloat/multilingual-e5-small
-EMBED_DIM=384
-```
-и заново прогнать ingestion с `--recreate`.
+## Эмбеддинги
+Считаются через GitHub Models API (`openai/text-embedding-3-small`, dim 1536) —
+тем же токеном, что и LLM. Локальная модель не нужна, RAM не расходуется.
+Если позже захочется лучшее качество по кыргызскому и появится дроплет ≥4 ГБ —
+можно вернуть локальный BGE-M3 (см. историю в `docs/adr`).
 
 ## Дальше (roadmap)
 RIASEC-тест (ветка LangGraph) · скрейпинг сайта (Bright Data) ·

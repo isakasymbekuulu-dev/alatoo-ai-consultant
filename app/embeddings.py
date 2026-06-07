@@ -1,32 +1,27 @@
-"""Shared embedding model (BGE-M3 by default).
+"""Embeddings via GitHub Models (OpenAI-compatible), text-embedding-3-small.
 
-Loaded once per process and reused by both the API and the ingestion script,
-so query-time and index-time vectors come from exactly the same model.
+Runs through the API (no local model / no torch), so it fits a small droplet.
+The same GitHub token (Models: read) is used for both the LLM and embeddings.
+The exact same model is used at index-time and query-time.
 """
-from functools import lru_cache
 from typing import List
 
-from sentence_transformers import SentenceTransformer
-
 from app.config import settings
+from app.llm import get_llm
 
-
-@lru_cache(maxsize=1)
-def get_model() -> SentenceTransformer:
-    # Lazy singleton; first call downloads the model into the HF cache volume.
-    return SentenceTransformer(settings.embed_model)
+# GitHub Models / OpenAI cap the array size per request; keep batches modest.
+_BATCH = 64
 
 
 def embed_texts(texts: List[str]) -> List[List[float]]:
-    model = get_model()
-    vectors = model.encode(
-        texts,
-        normalize_embeddings=True,   # cosine-ready unit vectors
-        convert_to_numpy=True,
-        show_progress_bar=False,
-        batch_size=16,
-    )
-    return vectors.tolist()
+    client = get_llm()
+    out: List[List[float]] = []
+    for i in range(0, len(texts), _BATCH):
+        batch = [t.replace("\n", " ") for t in texts[i:i + _BATCH]]
+        resp = client.embeddings.create(model=settings.embed_model, input=batch)
+        # Preserve input order.
+        out.extend(d.embedding for d in sorted(resp.data, key=lambda d: d.index))
+    return out
 
 
 def embed_query(text: str) -> List[float]:

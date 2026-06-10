@@ -51,6 +51,7 @@
   .bubble.bot li{margin:.2em 0}
   .bubble.bot a{color:var(--brand-2);font-weight:600;text-decoration:none}.bubble.bot a:hover{text-decoration:underline}
   .bubble.bot strong{color:#0a2e6b}
+  .bubble.bot .h{font-weight:700;color:#0a2e6b;margin:.6em 0 .25em;font-size:15px}
 
   .typing{display:flex;gap:5px;padding:4px 2px}
   .typing i{width:8px;height:8px;border-radius:50%;background:#aab4c6;animation:bounce 1.2s infinite}
@@ -186,7 +187,8 @@ function md(text){
   for(const ln of lines){
     const t=ln.trim(); if(!t){close();continue;}
     let m;
-    if(m=t.match(/^[-•]\s+(.*)/)){ if(!ul){close();out.push('<ul>');ul=true;} out.push('<li>'+m[1]+'</li>'); }
+    if(m=t.match(/^#{1,6}\s+(.*)/)){ close(); out.push('<div class="h">'+m[1]+'</div>'); }
+    else if(m=t.match(/^[-•]\s+(.*)/)){ if(!ul){close();out.push('<ul>');ul=true;} out.push('<li>'+m[1]+'</li>'); }
     else if(m=t.match(/^\d+[.)]\s+(.*)/)){ if(!ol){close();out.push('<ol>');ol=true;} out.push('<li>'+m[1]+'</li>'); }
     else { close(); out.push('<p>'+t+'</p>'); }
   }

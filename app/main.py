@@ -145,48 +145,32 @@ def index():
 
 
 # ---------------------------------------------------------------------------
-# Protected conversation viewer for analysis: /admin/logs?token=ADMIN_TOKEN
+# Protected conversation viewer (OpenWebUI-style, monochrome).
+#   /admin/logs?token=...           -> single-page viewer
+#   /admin/api/sessions?token=...   -> conversation list (JSON)
+#   /admin/api/session?token=&id=   -> one conversation's turns (JSON)
 # ---------------------------------------------------------------------------
-@app.get("/admin/logs", response_class=HTMLResponse)
-def admin_logs(token: str = Query(default=""), limit: int = Query(default=300)):
+def _admin_ok(token: str) -> None:
     if not settings.admin_token or token != settings.admin_token:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    rows = logging_store.recent(limit)
-    st = logging_store.stats()
 
-    def td(x):
-        return f"<td>{html.escape(str(x))}</td>"
 
-    body = []
-    for r in rows:
-        srcs = ", ".join(s.get("source", "") for s in json.loads(r["sources"] or "[]"))
-        consent = "✓" if r["consent"] else "—"
-        body.append(
-            "<tr>"
-            + td(r["id"]) + td(r["ts"]) + td(r["session_id"][:14]) + td(r["source"])
-            + td(consent)
-            + f'<td class="msg">{html.escape(r["user_msg"])}</td>'
-            + f'<td class="msg">{html.escape(r["assistant_msg"])}</td>'
-            + td(srcs)
-            + "</tr>"
-        )
+@app.get("/admin/api/sessions")
+def admin_sessions(token: str = Query(default="")):
+    _admin_ok(token)
+    return {"sessions": logging_store.sessions(500), **logging_store.stats()}
 
-    return f"""<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8">
-<title>AlaToo — журнал диалогов</title>
-<style>
- body{{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;background:#f4f6fb;color:#1a1a1a}}
- header{{background:#0b3d91;color:#fff;padding:14px 22px}}
- header h1{{margin:0;font-size:17px}} header span{{opacity:.85;font-size:13px}}
- table{{border-collapse:collapse;width:100%;background:#fff;font-size:13px}}
- th,td{{border:1px solid #e3e7ef;padding:8px 10px;text-align:left;vertical-align:top}}
- th{{background:#eef2fb;position:sticky;top:0}}
- td.msg{{max-width:420px;white-space:pre-wrap}}
- tr:nth-child(even){{background:#fafbfe}}
-</style></head><body>
-<header><h1>AlaToo — журнал диалогов</h1>
-<span>сообщений: {st['messages']} · сессий: {st['sessions']} · показаны последние {len(rows)}</span></header>
-<table><thead><tr>
-<th>#</th><th>время (UTC)</th><th>сессия</th><th>канал</th><th>согл.</th>
-<th>вопрос</th><th>ответ</th><th>источники</th></tr></thead>
-<tbody>{''.join(body)}</tbody></table>
-</body></html>"""
+
+@app.get("/admin/api/session")
+def admin_session(token: str = Query(default=""), id: str = Query(default="")):
+    _admin_ok(token)
+    return {"messages": logging_store.session_messages(id)}
+
+
+@app.get("/admin/logs", response_class=HTMLResponse)
+def admin_logs(token: str = Query(default="")):
+    _admin_ok(token)
+    page = STATIC_DIR / "admin.html"
+    if page.exists():
+        return HTMLResponse(page.read_text(encoding="utf-8"))
+    return HTMLResponse("<p>admin.html not found</p>", status_code=404)

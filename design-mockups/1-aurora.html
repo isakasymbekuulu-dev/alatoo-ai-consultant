@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Концепт 1 — Aurora (своя палитра)</title>
+<style>
+:root{--bg:#0a0a0f;--surf:#15151f;--surf2:#1b1b27;--line:rgba(255,255,255,.08);
+      --txt:#f0eff5;--mut:#9a98ad;--i1:#6366f1;--i2:#a855f7;--i3:#ec4899}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:var(--txt);height:100vh;
+     display:flex;flex-direction:column;overflow:hidden;background:
+     radial-gradient(820px 460px at 88% -8%,rgba(99,102,241,.18),transparent),
+     radial-gradient(760px 520px at -5% 108%,rgba(168,85,247,.16),transparent),
+     radial-gradient(600px 400px at 50% 120%,rgba(236,72,153,.10),transparent),var(--bg)}
+.top{display:flex;align-items:center;gap:11px;padding:15px 22px}
+.mark{width:31px;height:31px;border-radius:10px;background:linear-gradient(135deg,var(--i1),var(--i2) 55%,var(--i3));
+      display:grid;place-items:center}.mark svg{width:17px;height:17px}
+.brand{font-weight:600;font-size:15px}.brand b{font-weight:600;
+  background:linear-gradient(90deg,#a5b4fc,#e9a8ff,#fbb6d3);-webkit-background-clip:text;background-clip:text;color:transparent}
+.pill{margin-left:auto;font-size:12px;color:var(--mut);border:1px solid var(--line);padding:5px 12px;border-radius:20px}
+.scroll{flex:1;overflow-y:auto;padding:6px 0 18px}
+.col{max-width:720px;margin:0 auto;padding:0 22px;display:flex;flex-direction:column;gap:26px}
+.turn{display:flex;gap:14px}
+.av{width:30px;height:30px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;font-size:12px;font-weight:600}
+.av.ai{background:linear-gradient(135deg,var(--i1),var(--i2) 55%,var(--i3))}
+.av.me{background:var(--surf2);color:#c7c5da;border:1px solid var(--line)}
+.body{flex:1;padding-top:3px;font-size:15.5px;line-height:1.72}
+.me .body{color:#d7d5e6}
+.body h4{font-size:15px;font-weight:600;margin:15px 0 6px;color:#c9b6ff}
+.body ul{margin:6px 0;padding-left:20px}.body li{margin:5px 0}
+.body strong{color:#f5b8da}
+.chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+.chip{padding:11px 16px;border-radius:14px;font-size:13.5px;color:#d8d6ea;cursor:pointer;
+      background:var(--surf);border:1px solid var(--line);transition:.18s}
+.chip:hover{border-color:transparent;background:linear-gradient(135deg,rgba(99,102,241,.28),rgba(236,72,153,.24));color:#fff}
+.dock{padding:14px 22px 20px}
+.inp{max-width:720px;margin:0 auto;display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.04);
+     border:1px solid var(--line);border-radius:22px;padding:8px 8px 8px 18px;backdrop-filter:blur(8px)}
+.inp:focus-within{border-color:rgba(168,85,247,.6);box-shadow:0 0 0 4px rgba(168,85,247,.14)}
+.inp input{flex:1;background:none;border:0;outline:0;color:var(--txt);font-size:15px}
+.inp input::placeholder{color:#76748c}
+.ic{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;color:var(--mut)}
+.send{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--i1),var(--i2) 55%,var(--i3));
+      display:grid;place-items:center;cursor:pointer}.send svg{width:18px;height:18px}
+.foot{max-width:720px;margin:8px auto 0;text-align:center;font-size:11px;color:#6b697f}
+</style></head><body>
+<div class="top">
+  <div class="mark"><svg viewBox="0 0 24 24" fill="none"><path d="m12 2 2.4 6.1L21 9l-5 4 1.6 7L12 16.7 6.4 20 8 13 3 9l6.6-.9L12 2Z" fill="#fff"/></svg></div>
+  <div class="brand">AlaToo<b>GPT</b></div>
+  <div class="pill">● онлайн</div>
+</div>
+<div class="scroll"><div class="col">
+  <div class="turn me"><div class="av me">Я</div><div class="body">Есть ли скидки на обучение?</div></div>
+  <div class="turn"><div class="av ai"><svg viewBox="0 0 24 24" fill="none"><path d="m12 4 1.6 4.2L18 9l-3.4 2.8L15.6 16 12 13.6 8.4 16l1-4.2L6 9l4.4-.8L12 4Z" fill="#fff"/></svg></div><div class="body">
+    Да, в университете «Ала-Тоо» есть скидки для абитуриентов и студентов:
+    <h4>Для колледжа</h4>
+    <ul><li>10% — за свидетельство особого образца (с отличием);</li>
+    <li>30% — потерявшим обоих родителей;</li>
+    <li>до 40% — победителям внутренней олимпиады по математике.</li></ul>
+    <h4>Для бакалавриата</h4>
+    <ul><li>до 100% — по результатам ОРТ;</li>
+    <li>25% — выпускникам колледжа с красным дипломом.</li></ul>
+    Студент может использовать только <strong>одну</strong> скидку. Подробности — в приёмной комиссии.
+  </div></div>
+</div></div>
+<div class="dock">
+  <div class="inp">
+    <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div>
+    <input placeholder="Спросите о поступлении…"/>
+    <div class="send"><svg viewBox="0 0 24 24" fill="none"><path d="M4 12 20 5l-4 15-4-6-8-2Z" fill="#fff"/></svg></div>
+  </div>
+  <div class="foot">Ответы формирует ИИ по материалам вуза · уточняйте в приёмной комиссии</div>
+</div>
+</body></html>

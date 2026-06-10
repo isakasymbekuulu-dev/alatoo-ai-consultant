@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Концепт 2+ — анимация Gemini → монохром</title>
+<style>
+:root{--bg:#0d0d0d;--side:#171717;--surf:#1e1e1e;--surf2:#262626;--line:#2b2b2b;--txt:#ececec;--mut:#9a9a9a}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--txt);height:100vh;display:flex;overflow:hidden}
+/* sidebar (mono, как OpenWebUI) */
+.side{width:260px;flex:0 0 auto;background:var(--side);display:flex;flex-direction:column;padding:10px;z-index:3}
+.new{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:9px;padding:10px 12px;font-size:14px;cursor:pointer;color:var(--txt)}
+.new:hover{background:var(--surf)}
+.shead{font-size:11px;color:var(--mut);padding:14px 12px 6px}
+.item{font-size:13.5px;color:#cfcfcf;padding:9px 12px;border-radius:8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item:hover{background:var(--surf)}.item.on{background:var(--surf2)}
+.urow{margin-top:auto;display:flex;align-items:center;gap:10px;padding:9px;border-radius:9px}
+.uav{width:28px;height:28px;border-radius:50%;background:#3a3a3a;display:grid;place-items:center;font-size:12px}
+/* main */
+.main{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
+.bar{display:flex;align-items:center;gap:6px;padding:14px 18px;font-size:15px;font-weight:500;z-index:3}
+.bar .c{color:var(--mut);font-size:12px}
+/* aurora background — только в приветствии */
+.aura{position:absolute;inset:0;overflow:hidden;pointer-events:none;transition:opacity .7s ease;z-index:0}
+.blob{position:absolute;width:460px;height:460px;border-radius:50%;filter:blur(90px);opacity:.45}
+.b1{background:#6366f1;top:-150px;left:-60px;animation:f1 15s ease-in-out infinite}
+.b2{background:#ec4899;bottom:-180px;right:-40px;animation:f2 18s ease-in-out infinite}
+.b3{background:#22d3ee;top:25%;right:18%;width:380px;height:380px;animation:f3 20s ease-in-out infinite}
+@keyframes f1{50%{transform:translate(130px,90px) scale(1.18)}}
+@keyframes f2{50%{transform:translate(-120px,-70px) scale(1.22)}}
+@keyframes f3{50%{transform:translate(-90px,110px) scale(1.1)}}
+/* welcome */
+.welcome{position:relative;z-index:2;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;transition:opacity .45s ease}
+.greet{font-size:38px;font-weight:600;letter-spacing:.3px;margin-bottom:30px;text-align:center;
+  background:linear-gradient(90deg,#818cf8,#c084fc,#f472b6,#22d3ee,#818cf8);background-size:300% 100%;
+  -webkit-background-clip:text;background-clip:text;color:transparent;animation:flow 7s linear infinite}
+@keyframes flow{to{background-position:300% 0}}
+.box{width:100%;max-width:720px;display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.05);
+     border:1px solid rgba(255,255,255,.12);border-radius:26px;padding:12px 12px 12px 18px;backdrop-filter:blur(10px)}
+.box:focus-within{border-color:rgba(255,255,255,.28)}
+.box input{flex:1;background:none;border:0;outline:0;color:var(--txt);font-size:15px}
+.box input::placeholder{color:#8a8a8a}
+.send{width:36px;height:36px;border-radius:50%;background:#ececec;display:grid;place-items:center;cursor:pointer;border:0}
+.send svg{width:17px;height:17px}
+.sug{display:flex;flex-wrap:wrap;gap:9px;justify-content:center;max-width:720px;margin-top:18px}
+.s{border:1px solid rgba(255,255,255,.14);border-radius:11px;padding:9px 14px;font-size:13px;color:#dcdcdc;cursor:pointer;background:rgba(255,255,255,.03)}
+.s:hover{background:rgba(255,255,255,.08)}
+/* conversation (mono) */
+.convo{display:none;flex:1;flex-direction:column;min-width:0;z-index:2}
+.scroll{flex:1;overflow-y:auto;padding:18px 0}
+.col{max-width:760px;margin:0 auto;padding:0 22px;display:flex;flex-direction:column;gap:18px}
+.row{display:flex;gap:12px}
+.av{width:30px;height:30px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;font-size:12px;font-weight:600}
+.av.ai{background:#ececec}.av.ai svg{width:17px;height:17px}.av.me{background:#3a3a3a;color:#ddd}
+.txt{flex:1;font-size:15.5px;line-height:1.7;padding-top:3px}
+.me .txt{color:#dcdcdc}
+.txt h4{font-size:15px;font-weight:600;margin:13px 0 5px}
+.txt ul{margin:5px 0;padding-left:20px}.txt li{margin:4px 0}.txt strong{color:#fff}
+.dock{padding:12px 18px 18px;z-index:2}
+.dbox{max-width:760px;margin:0 auto;display:flex;align-items:center;gap:10px;background:var(--surf);border:1px solid var(--line);border-radius:24px;padding:10px 10px 10px 16px}
+.dbox input{flex:1;background:none;border:0;outline:0;color:var(--txt);font-size:15px}
+.dbox input::placeholder{color:#7c7c7c}
+.fade-out{opacity:0!important}
+@media(max-width:680px){.side{display:none}.greet{font-size:30px}}
+</style></head><body>
+<aside class="side">
+  <div class="new"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Новый чат</div>
+  <div class="shead">Сегодня</div>
+  <div class="item on" id="curItem">Новый диалог</div>
+  <div class="item">Документы для магистратуры</div>
+  <div class="item">Факультеты и направления</div>
+  <div class="urow"><span class="uav">Аб</span><span style="font-size:13.5px">Абитуриент</span></div>
+</aside>
+<main class="main">
+  <div class="bar">AlaTooGPT <span class="c">▾</span></div>
+
+  <div class="aura" id="aura"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
+
+  <section class="welcome" id="welcome">
+    <div class="greet">Чем могу помочь?</div>
+    <div class="box">
+      <input id="w-input" placeholder="Спросите о поступлении…" autocomplete="off"/>
+      <button class="send" onclick="start()"><svg viewBox="0 0 24 24" fill="none"><path d="M12 19V5M5 12l7-7 7 7" stroke="#111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
+    <div class="sug" id="sug">
+      <div class="s">Какие есть факультеты?</div><div class="s">Как поступить?</div>
+      <div class="s">Сколько стоит обучение?</div><div class="s">Какие документы нужны?</div>
+    </div>
+  </section>
+
+  <section class="convo" id="convo">
+    <div class="scroll"><div class="col" id="col"></div></div>
+    <div class="dock"><div class="dbox">
+      <input id="d-input" placeholder="Напишите сообщение…" autocomplete="off"/>
+      <button class="send" onclick="sendMore()"><svg viewBox="0 0 24 24" fill="none"><path d="M12 19V5M5 12l7-7 7 7" stroke="#111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div></div>
+  </section>
+</main>
+<script>
+const aura=document.getElementById('aura'),welcome=document.getElementById('welcome'),
+      convo=document.getElementById('convo'),col=document.getElementById('col');
+const aiSVG='<svg viewBox="0 0 24 24" fill="none"><path d="M3 17 9 7l4 6 3-4 5 8H3Z" fill="#111"/><circle cx="16" cy="5" r="2.2" fill="#111"/></svg>';
+const sample=`Да, в университете «Ала-Тоо» есть скидки:<h4>Для колледжа</h4><ul><li>10% — за аттестат с отличием;</li><li>до 40% — победителям олимпиады по математике.</li></ul><h4>Для бакалавриата</h4><ul><li>до 100% — по результатам ОРТ;</li><li>25% — выпускникам колледжа с красным дипломом.</li></ul>Можно использовать только <strong>одну</strong> скидку.`;
+function add(who,html){const r=document.createElement('div');r.className='row '+(who==='me'?'me':'');
+  r.innerHTML=`<div class="av ${who==='me'?'me':'ai'}">${who==='me'?'Я':aiSVG}</div><div class="txt">${html}</div>`;
+  col.appendChild(r);r.scrollIntoView({behavior:'smooth',block:'end'});}
+function transition(q){
+  document.getElementById('curItem').textContent=q.slice(0,28);
+  aura.classList.add('fade-out'); welcome.classList.add('fade-out');
+  setTimeout(()=>{ welcome.style.display='none'; aura.style.display='none';
+    convo.style.display='flex'; add('me',q); setTimeout(()=>add('ai',sample),350); },450);
+}
+function start(){const v=document.getElementById('w-input').value.trim()||'Есть ли скидки на обучение?';transition(v);}
+function sendMore(){const i=document.getElementById('d-input');const v=i.value.trim();if(!v)return;i.value='';add('me',v);setTimeout(()=>add('ai','Хороший вопрос! (демо-ответ) Уточните детали в приёмной комиссии.'),350);}
+document.getElementById('w-input').addEventListener('keydown',e=>{if(e.key==='Enter')start();});
+document.getElementById('d-input').addEventListener('keydown',e=>{if(e.key==='Enter')sendMore();});
+document.getElementById('sug').addEventListener('click',e=>{if(e.target.classList.contains('s'))transition(e.target.textContent);});
+</script>
+</body></html>

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Концепт 2 — Campus (моно, как OpenWebUI)</title>
+<style>
+:root{--bg:#0d0d0d;--side:#171717;--surf:#1e1e1e;--surf2:#262626;
+      --line:#2b2b2b;--txt:#ececec;--mut:#9a9a9a}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--txt);
+     height:100vh;display:flex;overflow:hidden}
+.side{width:260px;flex:0 0 auto;background:var(--side);display:flex;flex-direction:column;padding:10px}
+.new{display:flex;align-items:center;gap:10px;background:transparent;border:1px solid var(--line);
+     border-radius:9px;padding:10px 12px;font-size:14px;cursor:pointer;color:var(--txt)}
+.new:hover{background:var(--surf)}
+.search{display:flex;align-items:center;gap:9px;color:var(--mut);font-size:13.5px;padding:10px 12px;margin-top:4px;border-radius:9px;cursor:pointer}
+.search:hover{background:var(--surf)}
+.shead{font-size:11px;color:var(--mut);padding:14px 12px 6px}
+.item{font-size:13.5px;color:#cfcfcf;padding:9px 12px;border-radius:8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item:hover{background:var(--surf)}.item.on{background:var(--surf2)}
+.urow{margin-top:auto;display:flex;align-items:center;gap:10px;padding:9px;border-radius:9px;cursor:pointer}
+.urow:hover{background:var(--surf)}
+.uav{width:28px;height:28px;border-radius:50%;background:#3a3a3a;display:grid;place-items:center;font-size:12px}
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.bar{display:flex;align-items:center;gap:6px;padding:14px 18px;font-size:15px;font-weight:500}
+.bar .c{color:var(--mut);font-size:12px}
+.center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+.logo{width:46px;height:46px;border-radius:50%;background:#ececec;display:grid;place-items:center;margin-bottom:18px}
+.logo svg{width:26px;height:26px}
+.hi{font-size:24px;font-weight:500;margin-bottom:26px}
+.box{width:100%;max-width:720px;display:flex;align-items:center;gap:10px;background:var(--surf);
+     border:1px solid var(--line);border-radius:26px;padding:12px 12px 12px 18px}
+.box:focus-within{border-color:#3d3d3d}
+.box input{flex:1;background:none;border:0;outline:0;color:var(--txt);font-size:15px}
+.box input::placeholder{color:#7c7c7c}
+.box .mic{color:var(--mut);width:30px;height:30px;display:grid;place-items:center}
+.send{width:34px;height:34px;border-radius:50%;background:#ececec;display:grid;place-items:center;cursor:pointer}
+.send svg{width:17px;height:17px}
+.sug{display:flex;flex-wrap:wrap;gap:9px;justify-content:center;max-width:720px;margin-top:16px}
+.s{border:1px solid var(--line);border-radius:11px;padding:9px 14px;font-size:13px;color:#cfcfcf;cursor:pointer}
+.s:hover{background:var(--surf)}
+.tip{margin-top:22px;font-size:11px;color:#6f6f6f}
+@media(max-width:680px){.side{display:none}}
+</style></head><body>
+<aside class="side">
+  <div class="new"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Новый чат</div>
+  <div class="search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg> Поиск</div>
+  <div class="shead">Сегодня</div>
+  <div class="item on">Скидки на обучение</div>
+  <div class="item">Как поступить после колледжа</div>
+  <div class="item">Документы для магистратуры</div>
+  <div class="shead">Ранее</div>
+  <div class="item">Факультеты и направления</div>
+  <div class="item">Стоимость бакалавриата</div>
+  <div class="urow"><span class="uav">Аб</span><span style="font-size:13.5px">Абитуриент</span></div>
+</aside>
+<main class="main">
+  <div class="bar">AlaTooGPT <span class="c">▾</span></div>
+  <div class="center">
+    <div class="logo"><svg viewBox="0 0 24 24" fill="none"><path d="M3 17 9 7l4 6 3-4 5 8H3Z" fill="#111"/><circle cx="16" cy="5" r="2.2" fill="#111"/></svg></div>
+    <div class="hi">Чем могу помочь?</div>
+    <div class="box">
+      <input placeholder="Спросите что-нибудь…"/>
+      <div class="mic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></div>
+      <div class="send"><svg viewBox="0 0 24 24" fill="none"><path d="M12 19V5M5 12l7-7 7 7" stroke="#111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    </div>
+    <div class="sug">
+      <div class="s">Какие есть факультеты?</div>
+      <div class="s">Как поступить?</div>
+      <div class="s">Сколько стоит обучение?</div>
+      <div class="s">Какие документы нужны?</div>
+    </div>
+    <div class="tip">AlaTooGPT может ошибаться. Уточняйте важное в приёмной комиссии.</div>
+  </div>
+</main>
+</body></html>

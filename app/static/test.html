@@ -181,7 +181,7 @@ qhint:'Насколько вам понравилось бы это заняти
 scale:['Совсем не нравится','Скорее не нравится','Безразлично','Скорее нравится','Очень нравится'],
 rcodeLabel:'Ваш код Голланда',recHead:'Подходящие программы Ала-Тоо',discuss:'Обсудить результаты с ИИ-консультантом',
 retake:'Пройти заново',note:'Тест носит рекомендательный характер и не заменяет консультацию приёмной комиссии.',
-match:'соответствие',qOf:(a,b)=>`Вопрос ${a} из ${b}`,
+match:'соответствие',qOf:(a,b)=>`Вопрос ${a} из ${b}`,unanswered:'Пожалуйста, ответьте на этот вопрос, чтобы продолжить.',
 cTitle:'Согласие на обработку данных',cP1:'Чтобы пройти тест, подтвердите согласие на обработку ваших ответов и результатов.',
 cL1:'ответы и результаты сохраняются и используются вузом для профориентации и улучшения сервиса;',
 cL2:'результаты будут доступны ИИ-консультанту, чтобы давать персональные рекомендации;',
@@ -195,7 +195,7 @@ qhint:'Бул иш сизге канчалык жагат эле?',prev:'← А�
 scale:['Таптакыр жакпайт','Анча жакпайт','Баары бир','Жагат окшойт','Абдан жагат'],
 rcodeLabel:'Сиздин Голланд коду',recHead:'Ала-Тоонун ылайыктуу программалары',discuss:'Жыйынтыкты AI-консультант менен талкуулоо',
 retake:'Кайра өтүү',note:'Тест сунуш катары гана берилет жана кабыл алуу комиссиясынын консультациясын алмаштырбайт.',
-match:'дал келүү',qOf:(a,b)=>`${b} суроонун ${a}-сы`,
+match:'дал келүү',qOf:(a,b)=>`${b} суроонун ${a}-сы`,unanswered:'Улантуу үчүн бул суроого жооп бериңиз.',
 cTitle:'Маалыматты иштетүүгө макулдук',cP1:'Тесттен өтүү үчүн жоопторуңузду жана жыйынтыктарды иштетүүгө макулдугуңузду ырастаңыз.',
 cL1:'жооптор жана жыйынтыктар сакталып, ЖОЖ тарабынан кесипке багыттоо жана сервисти жакшыртуу үчүн колдонулат;',
 cL2:'жыйынтыктар жеке сунуштарды берүү үчүн AI-консультантка жеткиликтүү болот;',
@@ -209,7 +209,7 @@ qhint:'How much would you enjoy this activity?',prev:'← Back',
 scale:['Strongly dislike','Dislike','Unsure','Like','Strongly like'],
 rcodeLabel:'Your Holland code',recHead:'Matching Ala-Too programs',discuss:'Discuss results with the AI consultant',
 retake:'Retake the test',note:'The test is advisory and does not replace a consultation with the admissions office.',
-match:'match',qOf:(a,b)=>`Question ${a} of ${b}`,
+match:'match',qOf:(a,b)=>`Question ${a} of ${b}`,unanswered:'Please answer this question to continue.',
 cTitle:'Data processing consent',cP1:'To take the test, please confirm consent to processing your answers and results.',
 cL1:'answers and results are stored and used by the university for career guidance and service improvement;',
 cL2:'results will be available to the AI consultant to give personalized recommendations;',
@@ -253,12 +253,15 @@ function renderQ(){
     `<button class="opt ${answers[q.id]===i+1?'sel':''}" data-v="${i+1}"><b>${i+1}</b>${lab}</button>`).join('');
   $('prev').disabled=idx===0;
 }
+let advancing=false;
 $('scale').addEventListener('click',e=>{
+  if(advancing)return;                       // ignore clicks during the transition
   const o=e.target.closest('.opt');if(!o)return;
+  advancing=true;
   answers[questions[idx].id]=+o.dataset.v;
   o.parentElement.querySelectorAll('.opt').forEach(x=>x.classList.remove('sel'));
   o.classList.add('sel');
-  setTimeout(()=>{ if(idx<questions.length-1){idx++;renderQ();} else submit(); },180);
+  setTimeout(()=>{ advancing=false; if(idx<questions.length-1){idx++;renderQ();} else submit(); },180);
 });
 $('prev').onclick=()=>{if(idx>0){idx--;renderQ();}};
 $('start').onclick=async()=>{
@@ -270,6 +273,10 @@ $('start').onclick=async()=>{
 /* ---------- submit & results ---------- */
 let lastResult=null;
 async function submit(){
+  // safety net: if any question was skipped, jump back to the first unanswered one
+  const miss=questions.findIndex(q=>answers[q.id]===undefined);
+  if(miss>=0){advancing=false;idx=miss;renderQ();
+    alert(t().unanswered||'Пожалуйста, ответьте на этот вопрос.');return;}
   $('pfill').style.width='100%';
   const r=await fetch('/riasec/api/submit',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({answers,lang,chat_id:chatId||null,consent})});

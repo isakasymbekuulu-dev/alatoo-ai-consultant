@@ -158,7 +158,9 @@ def _admin_ok(token: str) -> None:
 @app.get("/admin/api/sessions")
 def admin_sessions(token: str = Query(default="")):
     _admin_ok(token)
-    return {"sessions": logging_store.sessions(500), **logging_store.stats()}
+    st = logging_store.stats()
+    return {"sessions": logging_store.sessions(500),
+            "total_sessions": st["sessions"], "total_messages": st["messages"]}
 
 
 @app.get("/admin/api/session")

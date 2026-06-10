@@ -64,7 +64,7 @@ async function load(){
   const r=await fetch('/admin/api/sessions?token='+encodeURIComponent(token));
   if(!r.ok){statEl.textContent='нет доступа (проверьте токен)';return;}
   const d=await r.json();all=d.sessions||[];
-  statEl.textContent=`${d.sessions} сессий · ${d.messages} сообщений`;
+  statEl.textContent=`${d.total_sessions} диалогов · ${d.total_messages} сообщений`;
   render();
 }
 function render(){

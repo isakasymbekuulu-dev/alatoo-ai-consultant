@@ -3,7 +3,7 @@ services:
     image: qdrant/qdrant:v1.12.4
     restart: unless-stopped
     ports:
-      - "6333:6333"   # REST (close in firewall for prod; keep for debugging)
+      - "127.0.0.1:6333:6333"   # localhost only — backend reaches it via the compose network
     volumes:
       - qdrant_data:/qdrant/storage   # persistent — survives restarts/redeploys
     healthcheck:
@@ -23,6 +23,7 @@ services:
     volumes:
       - ./data:/app/data
       - hf_cache:/root/.cache/huggingface   # cache BGE-M3 between restarts
+      - chatlogs:/app/logs                  # persistent conversation log (SQLite)
     depends_on:
       qdrant:
         condition: service_started
@@ -45,3 +46,4 @@ volumes:
   qdrant_data:
   openwebui_data:
   hf_cache:
+  chatlogs:

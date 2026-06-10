@@ -28,5 +28,9 @@ class Settings(BaseSettings):
     backend_api_key: str = ""
     served_model_name: str = "alatoo-rag"
 
+    # Conversation logging
+    log_db: str = "/app/logs/chat.db"
+    admin_token: str = ""   # protects /admin/logs; if empty, viewer is disabled
+
 
 settings = Settings()

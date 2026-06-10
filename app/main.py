@@ -1,11 +1,4 @@
-"""FastAPI backend: OpenAI-compatible RAG endpoint + public chat page + logging.
-
-- GET  /                       -> public chat page (no auth)
-- GET  /healthz                -> health probe
-- GET  /v1/models             -> OpenAI-compatible model list (for OpenWebUI)
-- POST /v1/chat/completions   -> OpenAI-compatible chat (stream + non-stream), logged
-- GET  /admin/logs?token=...  -> protected conversation viewer (for analysis)
-"""
+"""FastAPI backend: OpenAI-compatible RAG endpoint + public chat page + logging."""
 import json
 import threading
 import time
@@ -19,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse, HTMLResponse
 from pydantic import BaseModel
 
-from app import logging_store
+from app import logging_store, riasec
 from app.config import settings
 from app.llm import chat, chat_stream
 from app.rag import build_messages
@@ -49,6 +42,13 @@ class ChatRequest(BaseModel):
     temperature: float = 0.2
 
 
+class RiasecSubmit(BaseModel):
+    answers: dict
+    lang: str = "ru"
+    chat_id: Optional[str] = None
+    consent: bool = False
+
+
 def _check_auth(authorization: Optional[str]) -> None:
     if not settings.backend_api_key:
         return
@@ -56,7 +56,6 @@ def _check_auth(authorization: Optional[str]) -> None:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
 
-# --- simple in-memory per-IP rate limiter (sliding 60s window) ---
 _rl_lock = threading.Lock()
 _rl_hits: dict = defaultdict(deque)
 
@@ -115,16 +114,32 @@ async def chat_completions(
     x_session_id: Optional[str] = Header(None),
     x_client: Optional[str] = Header(None),
     x_consent: Optional[str] = Header(None),
+    x_riasec_id: Optional[str] = Header(None),
 ):
     _check_auth(authorization)
 
-    # Rate-limit public visitors by IP (staff via OpenWebUI are not throttled).
     if x_client == "public" and not _rate_ok(_client_ip(request)):
         raise HTTPException(status_code=429,
                             detail="Слишком много запросов. Подождите минуту и попробуйте снова.")
 
+    riasec_summary = None
+    stored = None
+    if x_riasec_id:
+        stored = logging_store.get_riasec(x_riasec_id)
+    if stored is None and x_session_id:
+        stored = logging_store.riasec_for_session(x_session_id)
+    if stored:
+        result = {
+            "code": stored["code"],
+            "scores": stored["scores"]["scores"],
+            "percents": stored["scores"]["percents"],
+            "ranked": stored["scores"]["ranked"],
+            "recommendations": stored["recs"],
+        }
+        riasec_summary = riasec.summary_for_llm(result)
+
     history = [{"role": m.role, "content": m.content} for m in req.messages]
-    messages, chunks = build_messages(history)
+    messages, chunks = build_messages(history, riasec_summary=riasec_summary)
     user_turns = [m for m in history if m.get("role") == "user"]
     last_user = user_turns[-1]["content"] if user_turns else ""
 
@@ -167,6 +182,74 @@ async def chat_completions(
     })
 
 
+@app.get("/test")
+def test_page():
+    page = STATIC_DIR / "test.html"
+    if page.exists():
+        return FileResponse(page)
+    return JSONResponse({"detail": "test page not found"}, status_code=404)
+
+
+@app.get("/riasec/api/questions")
+def riasec_questions(lang: str = Query(default="ru")):
+    return {"lang": lang, "scale": [1, 5], "questions": riasec.questions(lang)}
+
+
+@app.post("/riasec/api/submit")
+def riasec_submit(req: RiasecSubmit, request: Request):
+    if not _rate_ok(_client_ip(request)):
+        raise HTTPException(status_code=429, detail="Слишком много запросов.")
+    try:
+        result = riasec.score({k: int(v) for k, v in req.answers.items()})
+    except (ValueError, TypeError) as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    recs = riasec.recommend(result["scores"], lang=req.lang)
+    result["recommendations"] = recs
+
+    result_id = riasec.new_result_id()
+    session_id = req.chat_id or f"riasec-{result_id}"
+    logging_store.save_riasec(
+        result_id, session_id, req.lang, result["code"],
+        {"scores": result["scores"], "percents": result["percents"], "ranked": result["ranked"]},
+        recs, req.consent,
+    )
+    logging_store.log_turn(
+        session_id, "riasec-test",
+        "Пройден профориентационный тест RIASEC",
+        riasec.summary_for_llm(result), [], req.consent,
+    )
+    return {
+        "result_id": result_id,
+        "session_id": session_id,
+        "code": result["code"],
+        "scores": result["scores"],
+        "percents": result["percents"],
+        "ranked": result["ranked"],
+        "types": {t: riasec.TYPES[t][req.lang if req.lang in ("ru", "ky", "en") else "ru"]
+                  for t in riasec.RIASEC_ORDER},
+        "recommendations": recs,
+    }
+
+
+@app.get("/riasec/api/result")
+def riasec_result(id: str = Query(default=""), lang: str = Query(default="ru")):
+    stored = logging_store.get_riasec(id)
+    if not stored:
+        raise HTTPException(status_code=404, detail="result not found")
+    lang = lang if lang in ("ru", "ky", "en") else "ru"
+    return {
+        "result_id": stored["id"],
+        "session_id": stored["session_id"],
+        "code": stored["code"],
+        "scores": stored["scores"]["scores"],
+        "percents": stored["scores"]["percents"],
+        "ranked": stored["scores"]["ranked"],
+        "types": {t: riasec.TYPES[t][lang] for t in riasec.RIASEC_ORDER},
+        "recommendations": stored["recs"],
+    }
+
+
 @app.get("/")
 def index():
     page = STATIC_DIR / "index.html"
@@ -183,12 +266,6 @@ def logo():
     raise HTTPException(status_code=404, detail="logo not found")
 
 
-# ---------------------------------------------------------------------------
-# Protected conversation viewer (OpenWebUI-style, monochrome).
-#   /admin/logs?token=...           -> single-page viewer
-#   /admin/api/sessions?token=...   -> conversation list (JSON)
-#   /admin/api/session?token=&id=   -> one conversation's turns (JSON)
-# ---------------------------------------------------------------------------
 def _admin_ok(token: str) -> None:
     if not settings.admin_token or token != settings.admin_token:
         raise HTTPException(status_code=401, detail="Unauthorized")
@@ -206,6 +283,15 @@ def admin_sessions(token: str = Query(default="")):
 def admin_session(token: str = Query(default=""), id: str = Query(default="")):
     _admin_ok(token)
     return {"messages": logging_store.session_messages(id)}
+
+
+@app.get("/admin/api/riasec")
+def admin_riasec(token: str = Query(default=""), id: str = Query(default="")):
+    _admin_ok(token)
+    stored = logging_store.get_riasec(id) if id else None
+    if id and not stored:
+        raise HTTPException(status_code=404, detail="result not found")
+    return {"result": stored}
 
 
 @app.get("/admin/logs", response_class=HTMLResponse)

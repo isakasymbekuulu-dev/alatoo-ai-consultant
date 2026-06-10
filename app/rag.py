@@ -1,5 +1,5 @@
 """RAG core: retrieve context from Qdrant and build the prompt."""
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from app.config import settings
 from app.embeddings import embed_query
@@ -16,6 +16,18 @@ SYSTEM_PROMPT = """Ты — официальный AI-консультант А�
 - Отвечай на том языке, на котором задан вопрос (кыргызский, русский или английский).
 - Пиши кратко, дружелюбно и по делу. Где уместно — структурируй ответ.
 - В конце ответа, если использовал источники, добавь строку "Источники:" с их названиями.
+
+Профориентационный тест:
+- В вузе есть онлайн-тест профориентации RIASEC (методика Голланда, адаптация
+  O*NET Interest Profiler): 60 вопросов, ~7 минут, результат — профиль интересов
+  и подходящие программы Ала-Тоо.
+- Если пользователь не знает, какое направление выбрать, сомневается между
+  программами или спрашивает «куда мне поступать», предложи пройти тест и дай
+  ссылку в формате: [Пройти тест профориентации](/test).
+- Если ниже есть блок «РЕЗУЛЬТАТЫ ТЕСТА RIASEC» — пользователь уже прошёл тест.
+  Опирайся на его профиль: объясняй типы простыми словами, связывай рекомендации
+  с программами вуза из КОНТЕКСТА, отвечай на вопросы о результатах. Повторно
+  тест в этом случае не предлагай.
 """
 
 
@@ -55,7 +67,10 @@ def build_context(chunks: List[dict]) -> str:
     return "\n\n---\n\n".join(blocks)
 
 
-def build_messages(history: List[Dict[str, str]]) -> Tuple[List[Dict[str, str]], List[dict]]:
+def build_messages(
+    history: List[Dict[str, str]],
+    riasec_summary: Optional[str] = None,
+) -> Tuple[List[Dict[str, str]], List[dict]]:
     """Take incoming chat history, retrieve for the latest user turn, and
     return messages ready for the LLM plus the retrieved chunks."""
     user_turns = [m for m in history if m.get("role") == "user"]
@@ -67,6 +82,13 @@ def build_messages(history: List[Dict[str, str]]) -> Tuple[List[Dict[str, str]],
     convo = [m for m in history if m.get("role") in ("user", "assistant")][-6:]
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    if riasec_summary:
+        messages.append(
+            {
+                "role": "system",
+                "content": f"РЕЗУЛЬТАТЫ ТЕСТА RIASEC этого пользователя:\n\n{riasec_summary}",
+            }
+        )
     messages.append(
         {
             "role": "system",

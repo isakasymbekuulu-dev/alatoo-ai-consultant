@@ -1,8 +1,4 @@
-"""Lightweight conversation logging to SQLite (stdlib only).
-
-Stores one row per assistant turn so conversations can be reviewed and analysed
-later. The DB lives on a persistent Docker volume (see docker-compose).
-"""
+"""Lightweight conversation logging to SQLite (stdlib only)."""
 import json
 import os
 import sqlite3
@@ -38,7 +34,22 @@ def init() -> None:
                 """
             )
             c.execute("CREATE INDEX IF NOT EXISTS idx_session ON messages(session_id)")
-    except Exception as e:  # never let logging break the app
+            c.execute(
+                """
+                CREATE TABLE IF NOT EXISTS riasec_results (
+                    id         TEXT PRIMARY KEY,
+                    ts         TEXT,
+                    session_id TEXT,
+                    lang       TEXT,
+                    code       TEXT,
+                    scores     TEXT,
+                    recs       TEXT,
+                    consent    INTEGER
+                )
+                """
+            )
+            c.execute("CREATE INDEX IF NOT EXISTS idx_riasec_session ON riasec_results(session_id)")
+    except Exception as e:
         print(f"[log] init failed: {e}")
 
 
@@ -60,6 +71,67 @@ def log_turn(session_id, source, user_msg, assistant_msg, sources, consent) -> N
             )
     except Exception as e:
         print(f"[log] write failed: {e}")
+
+
+def save_riasec(result_id, session_id, lang, code, scores, recs, consent) -> None:
+    try:
+        with _lock, _connect() as c:
+            c.execute(
+                "INSERT OR REPLACE INTO riasec_results (id, ts, session_id, lang, code, scores, recs, consent) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (
+                    result_id,
+                    time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    session_id or "anon",
+                    lang or "ru",
+                    code or "",
+                    json.dumps(scores, ensure_ascii=False),
+                    json.dumps(recs, ensure_ascii=False),
+                    1 if consent else 0,
+                ),
+            )
+    except Exception as e:
+        print(f"[log] riasec write failed: {e}")
+
+
+def _riasec_row_to_dict(row) -> dict:
+    cols = ["id", "ts", "session_id", "lang", "code", "scores", "recs", "consent"]
+    d = dict(zip(cols, row))
+    for k in ("scores", "recs"):
+        try:
+            d[k] = json.loads(d[k] or "null")
+        except Exception:
+            d[k] = None
+    return d
+
+
+def get_riasec(result_id: str):
+    try:
+        with _lock, _connect() as c:
+            row = c.execute(
+                "SELECT id, ts, session_id, lang, code, scores, recs, consent "
+                "FROM riasec_results WHERE id = ?",
+                (result_id,),
+            ).fetchone()
+        return _riasec_row_to_dict(row) if row else None
+    except Exception as e:
+        print(f"[log] riasec read failed: {e}")
+        return None
+
+
+def riasec_for_session(session_id: str):
+    """Latest test result attached to a chat session (if any)."""
+    try:
+        with _lock, _connect() as c:
+            row = c.execute(
+                "SELECT id, ts, session_id, lang, code, scores, recs, consent "
+                "FROM riasec_results WHERE session_id = ? ORDER BY ts DESC LIMIT 1",
+                (session_id,),
+            ).fetchone()
+        return _riasec_row_to_dict(row) if row else None
+    except Exception as e:
+        print(f"[log] riasec read failed: {e}")
+        return None
 
 
 def recent(limit: int = 300) -> List[dict]:

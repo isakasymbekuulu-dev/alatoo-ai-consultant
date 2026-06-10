@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Тест профориентации · Ала-Тоо Университет</title>
+<style>
+:root{--bg:#0d0d0d;--side:#171717;--surf:#1e1e1e;--surf2:#262626;--line:#2b2b2b;--txt:#ececec;--mut:#9a9a9a;--acc:#ececec}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--txt);display:flex;flex-direction:column;overflow:hidden}
+
+.bar{display:flex;align-items:center;gap:12px;padding:13px 18px;border-bottom:1px solid var(--line);flex:0 0 auto}
+.bar img{width:30px;height:30px;object-fit:contain}
+.bar .title{font-size:15px;font-weight:500}
+.bar .back{color:var(--mut);font-size:13px;text-decoration:none;margin-left:auto}
+.bar .back:hover{color:var(--txt)}
+.langs{display:flex;gap:4px;margin-left:14px}
+.lng{border:1px solid var(--line);background:none;color:var(--mut);font-size:12px;border-radius:8px;padding:4px 9px;cursor:pointer}
+.lng.on{background:var(--surf2);color:var(--txt)}
+
+.wrap{flex:1;overflow-y:auto;display:flex;justify-content:center;padding:26px 18px}
+.page{width:100%;max-width:680px}
+
+/* intro */
+.hex{font-size:38px;text-align:center;margin:18px 0 8px;letter-spacing:6px;color:#cfcfcf}
+h1{font-size:24px;font-weight:600;text-align:center;margin-bottom:12px}
+.lead{font-size:14.5px;line-height:1.7;color:#bdbdbd;text-align:center;max-width:560px;margin:0 auto 18px}
+.facts{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:24px}
+.fact{border:1px solid var(--line);border-radius:11px;padding:9px 14px;font-size:13px;color:#cfcfcf}
+.cta{display:block;margin:0 auto;border:0;border-radius:12px;padding:13px 34px;font-size:15px;font-weight:500;background:var(--acc);color:#111;cursor:pointer}
+.cta:hover{opacity:.92}
+.priv{margin-top:22px;font-size:12px;color:#6f6f6f;text-align:center;line-height:1.6;max-width:520px;margin-left:auto;margin-right:auto}
+
+/* quiz */
+.prog{height:5px;background:var(--surf);border-radius:3px;overflow:hidden;margin-bottom:8px}
+.prog i{display:block;height:100%;background:#cfcfcf;width:0;transition:width .25s}
+.pnum{font-size:12px;color:var(--mut);margin-bottom:34px}
+.q{font-size:21px;font-weight:500;line-height:1.5;min-height:70px;margin-bottom:8px}
+.qhint{font-size:13px;color:var(--mut);margin-bottom:26px}
+.scale{display:flex;flex-direction:column;gap:9px}
+.opt{display:flex;align-items:center;gap:12px;border:1px solid var(--line);background:var(--surf);border-radius:12px;padding:13px 16px;font-size:14.5px;color:#dadada;cursor:pointer;text-align:left;width:100%}
+.opt:hover{background:var(--surf2)}
+.opt.sel{border-color:#888;background:var(--surf2)}
+.opt b{width:24px;height:24px;border-radius:50%;border:1px solid var(--line);display:grid;place-items:center;font-size:12px;font-weight:500;color:var(--mut);flex:0 0 auto}
+.opt.sel b{background:var(--acc);color:#111;border-color:var(--acc)}
+.nav{display:flex;justify-content:space-between;margin-top:26px}
+.ghost{border:1px solid var(--line);background:none;color:#cfcfcf;border-radius:10px;padding:9px 18px;font-size:13.5px;cursor:pointer}
+.ghost:hover{background:var(--surf)}
+.ghost:disabled{opacity:.35;cursor:default}
+
+/* results */
+.rcode{font-size:46px;font-weight:700;text-align:center;letter-spacing:10px;margin:6px 0 4px}
+.rsub{font-size:14px;color:var(--mut);text-align:center;margin-bottom:26px}
+.bars{display:flex;flex-direction:column;gap:10px;margin-bottom:26px}
+.brow{display:grid;grid-template-columns:26px 1fr 44px;align-items:center;gap:12px}
+.brow .l{font-size:14px;font-weight:600;color:#cfcfcf}
+.btrack{height:22px;background:var(--surf);border-radius:7px;overflow:hidden}
+.bfill{height:100%;background:#4b4b4b;border-radius:7px;width:0;transition:width .7s;display:flex;align-items:center}
+.brow.top .bfill{background:#ececec}
+.brow .v{font-size:13px;color:var(--mut);text-align:right}
+.tdesc{border:1px solid var(--line);border-radius:13px;padding:15px 17px;margin-bottom:11px;background:var(--surf)}
+.tdesc h3{font-size:14.5px;margin-bottom:5px}
+.tdesc p{font-size:13.5px;line-height:1.6;color:#bdbdbd}
+.sechead{font-size:16px;font-weight:600;margin:26px 0 13px}
+.prg{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--line);border-radius:13px;padding:13px 16px;margin-bottom:9px;background:var(--surf)}
+.prg .n{font-size:14.5px}
+.prg .f{font-size:12px;color:var(--mut);margin-top:3px}
+.prg .m{font-size:14px;font-weight:600;color:#ececec;white-space:nowrap}
+.actions{display:flex;gap:11px;justify-content:center;flex-wrap:wrap;margin:30px 0 14px}
+.note{font-size:11.5px;color:#6f6f6f;text-align:center;margin-bottom:24px}
+
+/* consent modal — same style as the chat page */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:grid;place-items:center;z-index:50;padding:18px}
+.modal{background:#161616;border:1px solid var(--line);border-radius:16px;max-width:460px;width:100%;padding:24px}
+.modal .ico{width:50px;height:50px;border-radius:50%;background:var(--surf2);display:grid;place-items:center;margin:0 auto 14px}
+.modal .ico svg{width:26px;height:26px;color:#ececec}
+.modal h2{font-size:18px;font-weight:600;text-align:center;margin-bottom:10px}
+.modal p{font-size:13.5px;line-height:1.6;color:#bdbdbd;margin-bottom:11px}
+.modal ul{font-size:13px;line-height:1.6;color:#bdbdbd;margin:0 0 14px;padding-left:18px}
+.modal .agree{width:100%;border:0;border-radius:11px;padding:12px;font-size:15px;font-weight:500;background:#ececec;color:#111;cursor:pointer}
+.modal .note2{text-align:center;font-size:11px;color:#6f6f6f;margin-top:11px}
+
+.hidden{display:none!important}
+@media(max-width:560px){.q{font-size:18px}.rcode{font-size:38px}}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <img src="/logo.png" alt="" onerror="this.style.display='none'">
+  <span class="title" data-i="title">Тест профориентации</span>
+  <div class="langs" id="langs">
+    <button class="lng on" data-lang="ru">РУ</button>
+    <button class="lng" data-lang="ky">КЫ</button>
+    <button class="lng" data-lang="en">EN</button>
+  </div>
+  <a class="back" href="/" data-i="back">← к консультанту</a>
+</div>
+
+<div class="wrap">
+
+  <!-- INTRO -->
+  <div class="page" id="intro">
+    <div class="hex">R I A S E C</div>
+    <h1 data-i="h1">Какое направление вам подходит?</h1>
+    <p class="lead" data-i="lead">Профориентационный тест по методике Голланда (адаптация O*NET Interest Profiler).
+      Оцените, насколько вам понравилось бы заниматься каждым из видов деятельности, —
+      и получите профиль интересов и подходящие программы Ала-Тоо Университета.</p>
+    <div class="facts">
+      <span class="fact" data-i="f1">60 вопросов</span>
+      <span class="fact" data-i="f2">≈ 7 минут</span>
+      <span class="fact" data-i="f3">6 типов личности</span>
+      <span class="fact" data-i="f4">Рекомендации программ</span>
+    </div>
+    <button class="cta" id="start" data-i="start">Начать тест</button>
+    <p class="priv" data-i="priv">Здесь нет правильных и неправильных ответов. Не думайте о зарплате или престиже —
+      отвечайте только о том, было бы вам интересно само занятие.</p>
+  </div>
+
+  <!-- QUIZ -->
+  <div class="page hidden" id="quiz">
+    <div class="prog"><i id="pfill"></i></div>
+    <div class="pnum" id="pnum"></div>
+    <div class="q" id="qtext"></div>
+    <div class="qhint" data-i="qhint">Насколько вам понравилось бы это занятие?</div>
+    <div class="scale" id="scale"></div>
+    <div class="nav">
+      <button class="ghost" id="prev" data-i="prev">← Назад</button>
+      <button class="ghost" id="skipless" style="visibility:hidden"></button>
+    </div>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="page hidden" id="results">
+    <div class="rsub" data-i="rcodeLabel" style="margin-bottom:4px">Ваш код Голланда</div>
+    <div class="rcode" id="rcode"></div>
+    <div class="rsub" id="rtypes"></div>
+    <div class="bars" id="bars"></div>
+    <div id="topdescs"></div>
+    <div class="sechead" data-i="recHead">Подходящие программы Ала-Тоо</div>
+    <div id="progs"></div>
+    <div class="actions">
+      <button class="cta" id="discuss" data-i="discuss">Обсудить результаты с ИИ-консультантом</button>
+      <button class="ghost" id="retake" data-i="retake">Пройти заново</button>
+    </div>
+    <p class="note" data-i="note">Тест носит рекомендательный характер и не заменяет консультацию приёмной комиссии.</p>
+  </div>
+
+</div>
+
+<!-- CONSENT -->
+<div class="overlay hidden" id="overlay">
+  <div class="modal">
+    <div class="ico"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5l-8-3Z" fill="currentColor"/><path d="m9.5 12 1.8 1.8 3.5-3.6" stroke="#161616" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <h2 data-i="cTitle">Согласие на обработку данных</h2>
+    <p data-i="cP1">Чтобы пройти тест, подтвердите согласие на обработку ваших ответов и результатов.</p>
+    <ul>
+      <li data-i="cL1">ответы и результаты сохраняются и используются вузом для профориентации и улучшения сервиса;</li>
+      <li data-i="cL2">результаты будут доступны ИИ-консультанту, чтобы давать персональные рекомендации;</li>
+      <li data-i="cL3">данные обезличены: не вводите персональные данные, тест их не запрашивает.</li>
+    </ul>
+    <button class="agree" id="agree" data-i="cBtn">Принимаю и продолжить</button>
+    <div class="note2" data-i="cNote">Нажимая кнопку, вы соглашаетесь на сбор и обработку результатов теста.</div>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const params=new URLSearchParams(location.search);
+const chatId=params.get('chat')||'';
+let lang=localStorage.getItem('alatoo_test_lang')||'ru';
+
+/* ---------- i18n ---------- */
+const I={
+ru:{title:'Тест профориентации',back:'← к консультанту',h1:'Какое направление вам подходит?',
+lead:'Профориентационный тест по методике Голланда (адаптация O*NET Interest Profiler). Оцените, насколько вам понравилось бы заниматься каждым из видов деятельности, — и получите профиль интересов и подходящие программы Ала-Тоо Университета.',
+f1:'60 вопросов',f2:'≈ 7 минут',f3:'6 типов личности',f4:'Рекомендации программ',start:'Начать тест',
+priv:'Здесь нет правильных и неправильных ответов. Не думайте о зарплате или престиже — отвечайте только о том, было бы вам интересно само занятие.',
+qhint:'Насколько вам понравилось бы это занятие?',prev:'← Назад',
+scale:['Совсем не нравится','Скорее не нравится','Безразлично','Скорее нравится','Очень нравится'],
+rcodeLabel:'Ваш код Голланда',recHead:'Подходящие программы Ала-Тоо',discuss:'Обсудить результаты с ИИ-консультантом',
+retake:'Пройти заново',note:'Тест носит рекомендательный характер и не заменяет консультацию приёмной комиссии.',
+match:'соответствие',qOf:(a,b)=>`Вопрос ${a} из ${b}`,
+cTitle:'Согласие на обработку данных',cP1:'Чтобы пройти тест, подтвердите согласие на обработку ваших ответов и результатов.',
+cL1:'ответы и результаты сохраняются и используются вузом для профориентации и улучшения сервиса;',
+cL2:'результаты будут доступны ИИ-консультанту, чтобы давать персональные рекомендации;',
+cL3:'данные обезличены: не вводите персональные данные, тест их не запрашивает.',
+cBtn:'Принимаю и продолжить',cNote:'Нажимая кнопку, вы соглашаетесь на сбор и обработку результатов теста.'},
+ky:{title:'Кесипке багыттоо тести',back:'← консультантка',h1:'Кайсы багыт сизге туура келет?',
+lead:'Голланд методикасы боюнча кесипке багыттоо тести (O*NET Interest Profiler адаптациясы). Ар бир иш-аракет канчалык жагаарын баалаңыз — кызыгуу профилин жана Ала-Тоо университетинин ылайыктуу программаларын аласыз.',
+f1:'60 суроо',f2:'≈ 7 мүнөт',f3:'6 тип',f4:'Программа сунуштары',start:'Тестти баштоо',
+priv:'Бул жерде туура же туура эмес жооптор жок. Айлык же кадыр-барк жөнүндө ойлонбоңуз — ишмердиктин өзү кызыктуубу, ошого гана жооп бериңиз.',
+qhint:'Бул иш сизге канчалык жагат эле?',prev:'← Артка',
+scale:['Таптакыр жакпайт','Анча жакпайт','Баары бир','Жагат окшойт','Абдан жагат'],
+rcodeLabel:'Сиздин Голланд коду',recHead:'Ала-Тоонун ылайыктуу программалары',discuss:'Жыйынтыкты AI-консультант менен талкуулоо',
+retake:'Кайра өтүү',note:'Тест сунуш катары гана берилет жана кабыл алуу комиссиясынын консультациясын алмаштырбайт.',
+match:'дал келүү',qOf:(a,b)=>`${b} суроонун ${a}-сы`,
+cTitle:'Маалыматты иштетүүгө макулдук',cP1:'Тесттен өтүү үчүн жоопторуңузду жана жыйынтыктарды иштетүүгө макулдугуңузду ырастаңыз.',
+cL1:'жооптор жана жыйынтыктар сакталып, ЖОЖ тарабынан кесипке багыттоо жана сервисти жакшыртуу үчүн колдонулат;',
+cL2:'жыйынтыктар жеке сунуштарды берүү үчүн AI-консультантка жеткиликтүү болот;',
+cL3:'маалыматтар жашыруун: жеке маалыматтарды киргизбеңиз, тест аларды сурабайт.',
+cBtn:'Макулмун, улантуу',cNote:'Баскычты басуу менен тест жыйынтыктарын чогултууга жана иштетүүгө макул болосуз.'},
+en:{title:'Career Interest Test',back:'← to consultant',h1:'Which program fits you?',
+lead:'A career interest test based on Holland\'s RIASEC model (adaptation of the O*NET Interest Profiler). Rate how much you would enjoy each activity — and get your interest profile with matching Ala-Too University programs.',
+f1:'60 questions',f2:'≈ 7 minutes',f3:'6 personality types',f4:'Program recommendations',start:'Start the test',
+priv:'There are no right or wrong answers. Don\'t think about salary or prestige — just whether you would enjoy the activity itself.',
+qhint:'How much would you enjoy this activity?',prev:'← Back',
+scale:['Strongly dislike','Dislike','Unsure','Like','Strongly like'],
+rcodeLabel:'Your Holland code',recHead:'Matching Ala-Too programs',discuss:'Discuss results with the AI consultant',
+retake:'Retake the test',note:'The test is advisory and does not replace a consultation with the admissions office.',
+match:'match',qOf:(a,b)=>`Question ${a} of ${b}`,
+cTitle:'Data processing consent',cP1:'To take the test, please confirm consent to processing your answers and results.',
+cL1:'answers and results are stored and used by the university for career guidance and service improvement;',
+cL2:'results will be available to the AI consultant to give personalized recommendations;',
+cL3:'data is anonymous: do not enter personal data — the test never asks for it.',
+cBtn:'I agree, continue',cNote:'By clicking, you consent to collection and processing of test results.'}
+};
+function t(){return I[lang]||I.ru}
+function applyI18n(){
+  document.querySelectorAll('[data-i]').forEach(el=>{const k=el.dataset.i;if(t()[k])el.textContent=t()[k];});
+  document.querySelectorAll('.lng').forEach(b=>b.classList.toggle('on',b.dataset.lang===lang));
+  document.documentElement.lang=lang;
+}
+
+/* ---------- consent ---------- */
+let consent=!!localStorage.getItem('alatoo_test_consent');
+if(!consent)$('overlay').classList.remove('hidden');
+$('agree').onclick=()=>{consent=true;localStorage.setItem('alatoo_test_consent',new Date().toISOString());$('overlay').classList.add('hidden');};
+
+/* ---------- state ---------- */
+let questions=[],idx=0,answers={};
+
+async function loadQuestions(){
+  const r=await fetch('/riasec/api/questions?lang='+lang);
+  questions=(await r.json()).questions;
+}
+
+$('langs').addEventListener('click',async e=>{
+  const b=e.target.closest('.lng');if(!b||b.dataset.lang===lang)return;
+  lang=b.dataset.lang;localStorage.setItem('alatoo_test_lang',lang);applyI18n();
+  if(questions.length){await loadQuestions();renderQ();}
+});
+
+/* ---------- quiz ---------- */
+function show(id){['intro','quiz','results'].forEach(p=>$(p).classList.toggle('hidden',p!==id));}
+function renderQ(){
+  const q=questions[idx],n=questions.length;
+  $('pfill').style.width=Math.round(idx/n*100)+'%';
+  $('pnum').textContent=t().qOf(idx+1,n);
+  $('qtext').textContent=q.text;
+  $('scale').innerHTML=t().scale.map((lab,i)=>
+    `<button class="opt ${answers[q.id]===i+1?'sel':''}" data-v="${i+1}"><b>${i+1}</b>${lab}</button>`).join('');
+  $('prev').disabled=idx===0;
+}
+$('scale').addEventListener('click',e=>{
+  const o=e.target.closest('.opt');if(!o)return;
+  answers[questions[idx].id]=+o.dataset.v;
+  o.parentElement.querySelectorAll('.opt').forEach(x=>x.classList.remove('sel'));
+  o.classList.add('sel');
+  setTimeout(()=>{ if(idx<questions.length-1){idx++;renderQ();} else submit(); },180);
+});
+$('prev').onclick=()=>{if(idx>0){idx--;renderQ();}};
+$('start').onclick=async()=>{
+  if(!consent){$('overlay').classList.remove('hidden');return;}
+  if(!questions.length)await loadQuestions();
+  idx=0;show('quiz');renderQ();
+};
+
+/* ---------- submit & results ---------- */
+let lastResult=null;
+async function submit(){
+  $('pfill').style.width='100%';
+  const r=await fetch('/riasec/api/submit',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({answers,lang,chat_id:chatId||null,consent})});
+  if(!r.ok){alert('Ошибка отправки. Попробуйте ещё раз.');return;}
+  lastResult=await r.json();
+  renderResults(lastResult);
+  show('results');
+}
+function renderResults(R){
+  $('rcode').textContent=R.code.split('').join(' ');
+  $('rtypes').textContent=R.code.split('').map(c=>R.types[c].name).join(' · ');
+  const top3=R.code;
+  $('bars').innerHTML=R.ranked.map(c=>`
+    <div class="brow ${top3.includes(c)?'top':''}">
+      <span class="l">${c}</span>
+      <div class="btrack"><div class="bfill" data-w="${R.percents[c]}"></div></div>
+      <span class="v">${R.percents[c]}%</span>
+    </div>`).join('');
+  requestAnimationFrame(()=>requestAnimationFrame(()=>
+    document.querySelectorAll('.bfill').forEach(b=>b.style.width=Math.max(3,+b.dataset.w)+'%')));
+  $('topdescs').innerHTML=top3.split('').map(c=>`
+    <div class="tdesc"><h3>${c} — ${R.types[c].name}</h3><p>${R.types[c].desc}</p></div>`).join('');
+  $('progs').innerHTML=R.recommendations.map(p=>`
+    <div class="prg"><div><div class="n">${p.program}</div><div class="f">${p.faculty}</div></div>
+    <div class="m">${p.match}% ${t().match}</div></div>`).join('');
+}
+$('retake').onclick=()=>{answers={};idx=0;show('quiz');renderQ();};
+$('discuss').onclick=()=>{
+  if(!lastResult)return;
+  const u=new URL('/',location.origin);
+  u.searchParams.set('riasec',lastResult.result_id);
+  if(chatId)u.searchParams.set('chat',chatId);
+  location.href=u.toString();
+};
+
+applyI18n();
+</script>
+</body>
+</html>

@@ -113,6 +113,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Ar
     <div class="sug" id="sug">
       <div class="s">Какие есть факультеты?</div><div class="s">Как поступить?</div>
       <div class="s">Сколько стоит обучение?</div><div class="s">Какие документы нужны?</div>
+      <a class="s" id="testLink" href="/test" style="text-decoration:none">🧭 Не знаю, куда поступать — пройти тест</a>
     </div>
     <div class="tip">AlaTooGPT может ошибаться. Важное уточняйте в приёмной комиссии.</div>
   </section>
@@ -167,6 +168,7 @@ function showConvo(){welcome.style.display='none';convo.style.display='flex';}
 function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function md(t){let s=esc(t);
   s=s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+  s=s.replace(/\[([^\]]+)\]\((\/[^\s)]*)\)/g,'<a href="$2" class="ilink">$1</a>');
   s=s.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g,'$1<a href="$2" target="_blank" rel="noopener">$2</a>');
   s=s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
   const L=s.split('\n');let o=[],ul=false,ol=false;const c=()=>{if(ul){o.push('</ul>');ul=false;}if(ol){o.push('</ol>');ol=false;}};
@@ -193,8 +195,10 @@ async function ask(q){
   const bot=addBubble('assistant','<div class="typing"><i></i><i></i><i></i></div>');
   setBusy(true);
   try{
+    const hdrs={'Content-Type':'application/json','X-Session-Id':c.id,'X-Client':'public','X-Consent':'1'};
+    if(c.riasec)hdrs['X-Riasec-Id']=c.riasec;
     const resp=await fetch('/v1/chat/completions',{method:'POST',
-      headers:{'Content-Type':'application/json','X-Session-Id':c.id,'X-Client':'public','X-Consent':'1'},
+      headers:hdrs,
       body:JSON.stringify({model:'alatoo-rag',stream:true,messages:c.msgs.map(m=>({role:m.role,content:m.content}))})});
     if(!resp.ok)throw new Error('HTTP '+resp.status);
     const rd=resp.body.getReader(),dec=new TextDecoder();let acc='',buf='',started=false;
@@ -217,13 +221,58 @@ function autoGrow(t){t.style.height='auto';t.style.height=Math.min(t.scrollHeigh
   t.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submit(t);}});});
 $('wsend').onclick=()=>submit($('wq'));
 $('dsend').onclick=()=>submit($('dq'));
-$('sug').addEventListener('click',e=>{if(e.target.classList.contains('s'))ask(e.target.textContent);});
+$('sug').addEventListener('click',e=>{if(e.target.classList.contains('s')&&e.target.id!=='testLink')ask(e.target.textContent);});
 $('newChat').onclick=()=>{newChat();side.classList.remove('open');};
 histList.addEventListener('click',e=>{const it=e.target.closest('.item');if(it){openChat(it.dataset.id);side.classList.remove('open');}});
 $('menuBtn').onclick=()=>side.classList.toggle('open');
 
+/* ---- RIASEC test integration ---- */
+// Send the user to the test keeping the current chat id, so results come back here.
+$('testLink').onclick=e=>{e.preventDefault();location.href='/test?chat='+encodeURIComponent(curId||'');};
+// Links like [Пройти тест](/test) inside AI answers: keep the chat id too.
+col.addEventListener('click',e=>{
+  const a=e.target.closest('a.ilink');if(!a)return;
+  const href=a.getAttribute('href')||'';
+  if(href.startsWith('/test')){e.preventDefault();location.href='/test?chat='+encodeURIComponent(curId||'');}
+});
+
+function riasecCard(R){
+  const names=R.code.split('').map(c=>`${c} — ${R.types[c].name}`).join(', ');
+  const bars=R.ranked.map(c=>`- **${c} ${R.types[c].name}**: ${R.percents[c]}%`).join('\n');
+  const progs=R.recommendations.map(p=>`- ${p.program} (${p.faculty}) — соответствие ${p.match}%`).join('\n');
+  return `#### 🧭 Результаты теста профориентации RIASEC\n**Код Голланда: ${R.code}** (${names})\n${bars}\n#### Рекомендованные программы\n${progs}`;
+}
+
+async function initRiasec(rid){
+  try{
+    const r=await fetch('/riasec/api/result?id='+encodeURIComponent(rid));
+    if(!r.ok)return false;
+    const R=await r.json();
+    // Use the server session id as the chat id so test + chat share one log session.
+    const cid=R.session_id;
+    let c=chats.find(x=>x.id===cid);
+    if(!c){c={id:cid,title:'Тест профориентации',msgs:[]};chats.unshift(c);}
+    c.riasec=R.result_id;
+    // Show the result card in the chat (stored locally like a normal assistant turn).
+    if(!c.msgs.some(m=>m.riasec===R.result_id)){
+      c.msgs.push({role:'assistant',content:riasecCard(R),riasec:R.result_id});
+    }
+    save();curId=cid;renderHist();showConvo();
+    col.innerHTML='';
+    c.msgs.forEach(m=>addBubble(m.role,m.role==='assistant'?md(m.content):esc(m.content)));
+    history.replaceState(null,'','/');
+    // Kick off the discussion automatically.
+    ask('Я прошёл(а) тест профориентации. Расскажи, что означают мои результаты и какие программы мне подходят?');
+    return true;
+  }catch(e){return false;}
+}
+
 /* init */
-if(chats.length){openChat(chats[0].id);}else{newChat();}
+const _qp=new URLSearchParams(location.search);
+const _rid=_qp.get('riasec');
+if(_rid){
+  initRiasec(_rid).then(ok=>{if(!ok){if(chats.length){openChat(chats[0].id);}else{newChat();}}});
+}else if(chats.length){openChat(chats[0].id);}else{newChat();}
 </script>
 </body>
 </html>

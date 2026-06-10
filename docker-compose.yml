@@ -32,18 +32,20 @@ services:
     image: ghcr.io/open-webui/open-webui:main
     restart: unless-stopped
     ports:
-      - "3000:8080"   # staff/admin UI (login)
+      - "127.0.0.1:8080:8080"   # nginx proxies alatoogpt.xyz here (localhost only)
     environment:
-      - OPENAI_API_BASE_URL=http://backend:8000/v1
-      - OPENAI_API_KEY=${BACKEND_API_KEY:-sk-local-dev}
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}
       - WEBUI_NAME=AlaToo AI Consultant
     volumes:
-      - openwebui_data:/app/backend/data
+      - openwebui-data:/app/backend/data   # reuse EXISTING data: users, chats, model connection
     depends_on:
       - backend
+    # On the same compose network as backend, so http://backend:8000/v1 always resolves
+    # (this is what makes the OpenWebUI->backend link survive container recreation).
 
 volumes:
   qdrant_data:
-  openwebui_data:
   hf_cache:
   chatlogs:
+  openwebui-data:
+    external: true   # the volume created earlier by the standalone container

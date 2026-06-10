@@ -32,5 +32,8 @@ class Settings(BaseSettings):
     log_db: str = "/app/logs/chat.db"
     admin_token: str = ""   # protects /admin/logs; if empty, viewer is disabled
 
+    # Rate limiting for the public chat (per client IP, per minute)
+    rate_limit_per_min: int = 20
+
 
 settings = Settings()

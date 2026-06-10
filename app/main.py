@@ -6,14 +6,15 @@
 - POST /v1/chat/completions   -> OpenAI-compatible chat (stream + non-stream), logged
 - GET  /admin/logs?token=...  -> protected conversation viewer (for analysis)
 """
-import html
 import json
+import threading
 import time
 import uuid
+from collections import defaultdict, deque
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse, HTMLResponse
 from pydantic import BaseModel
@@ -55,6 +56,30 @@ def _check_auth(authorization: Optional[str]) -> None:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
 
+# --- simple in-memory per-IP rate limiter (sliding 60s window) ---
+_rl_lock = threading.Lock()
+_rl_hits: dict = defaultdict(deque)
+
+
+def _client_ip(request: Request) -> str:
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _rate_ok(ip: str) -> bool:
+    now = time.time()
+    with _rl_lock:
+        dq = _rl_hits[ip]
+        while dq and now - dq[0] > 60:
+            dq.popleft()
+        if len(dq) >= settings.rate_limit_per_min:
+            return False
+        dq.append(now)
+        return True
+
+
 def _sources_summary(chunks: List[dict]) -> List[dict]:
     return [
         {"title": c.get("title", ""), "source": c.get("source", ""),
@@ -85,12 +110,18 @@ def _sse(data: dict) -> str:
 @app.post("/v1/chat/completions")
 async def chat_completions(
     req: ChatRequest,
+    request: Request,
     authorization: Optional[str] = Header(None),
     x_session_id: Optional[str] = Header(None),
     x_client: Optional[str] = Header(None),
     x_consent: Optional[str] = Header(None),
 ):
     _check_auth(authorization)
+
+    # Rate-limit public visitors by IP (staff via OpenWebUI are not throttled).
+    if x_client == "public" and not _rate_ok(_client_ip(request)):
+        raise HTTPException(status_code=429,
+                            detail="Слишком много запросов. Подождите минуту и попробуйте снова.")
 
     history = [{"role": m.role, "content": m.content} for m in req.messages]
     messages, chunks = build_messages(history)
@@ -142,6 +173,14 @@ def index():
     if page.exists():
         return FileResponse(page)
     return JSONResponse({"detail": "public chat page not found"}, status_code=404)
+
+
+@app.get("/logo.png")
+def logo():
+    p = STATIC_DIR / "logo.png"
+    if p.exists():
+        return FileResponse(p, media_type="image/png")
+    raise HTTPException(status_code=404, detail="logo not found")
 
 
 # ---------------------------------------------------------------------------

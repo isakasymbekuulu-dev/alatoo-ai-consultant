@@ -47,6 +47,7 @@ class RiasecSubmit(BaseModel):
     lang: str = "ru"
     chat_id: Optional[str] = None
     consent: bool = False
+    name: Optional[str] = None
 
 
 def _check_auth(authorization: Optional[str]) -> None:
@@ -136,7 +137,7 @@ async def chat_completions(
             "ranked": stored["scores"]["ranked"],
             "recommendations": stored["recs"],
         }
-        riasec_summary = riasec.summary_for_llm(result)
+        riasec_summary = riasec.summary_for_llm(result, name=stored.get("name"))
 
     history = [{"role": m.role, "content": m.content} for m in req.messages]
     messages, chunks = build_messages(history, riasec_summary=riasec_summary)
@@ -209,19 +210,21 @@ def riasec_submit(req: RiasecSubmit, request: Request):
 
     result_id = riasec.new_result_id()
     session_id = req.chat_id or f"riasec-{result_id}"
+    name = (req.name or "").strip() or None
     logging_store.save_riasec(
         result_id, session_id, req.lang, result["code"],
         {"scores": result["scores"], "percents": result["percents"], "ranked": result["ranked"]},
-        recs, req.consent,
+        recs, req.consent, name=name,
     )
     logging_store.log_turn(
         session_id, "riasec-test",
-        "Пройден профориентационный тест RIASEC",
-        riasec.summary_for_llm(result), [], req.consent,
+        f"Пройден профориентационный тест RIASEC{(' — ' + name) if name else ''}",
+        riasec.summary_for_llm(result, name=name), [], req.consent,
     )
     return {
         "result_id": result_id,
         "session_id": session_id,
+        "name": name,
         "code": result["code"],
         "scores": result["scores"],
         "percents": result["percents"],
@@ -241,6 +244,7 @@ def riasec_result(id: str = Query(default=""), lang: str = Query(default="ru")):
     return {
         "result_id": stored["id"],
         "session_id": stored["session_id"],
+        "name": stored.get("name"),
         "code": stored["code"],
         "scores": stored["scores"]["scores"],
         "percents": stored["scores"]["percents"],

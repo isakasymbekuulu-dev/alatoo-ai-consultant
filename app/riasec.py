@@ -209,10 +209,13 @@ def new_result_id() -> str:
     return uuid.uuid4().hex[:16]
 
 
-def summary_for_llm(result: dict) -> str:
+def summary_for_llm(result: dict, name: str = None) -> str:
     """Compact Russian summary injected into the LLM context."""
     sc, pc = result["scores"], result["percents"]
-    lines = [
+    lines = []
+    if name:
+        lines.append(f"ФИО абитуриента: {name}")
+    lines += [
         f"Код Голланда (топ-3 типа): {result['code']}",
         "Баллы по типам (10–50, в скобках % выраженности):",
     ]

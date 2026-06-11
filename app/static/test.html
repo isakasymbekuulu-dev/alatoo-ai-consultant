@@ -31,6 +31,10 @@ h1{font-size:24px;font-weight:600;text-align:center;margin-bottom:12px}
 .cta{display:block;margin:0 auto;border:0;border-radius:12px;padding:13px 34px;font-size:15px;font-weight:500;background:var(--acc);color:#111;cursor:pointer}
 .cta:hover{opacity:.92}
 .priv{margin-top:22px;font-size:12px;color:#6f6f6f;text-align:center;line-height:1.6;max-width:520px;margin-left:auto;margin-right:auto}
+.field{max-width:360px;margin:0 auto 16px;text-align:left}
+.field label{display:block;font-size:12.5px;color:#9a9a9a;margin-bottom:6px}
+.fio{width:100%;background:var(--surf);border:1px solid var(--line);border-radius:11px;padding:12px 14px;font-size:15px;color:var(--txt);outline:0;font-family:inherit}
+.fio:focus{border-color:#3d3d3d}
 
 /* quiz */
 .prog{height:5px;background:var(--surf);border-radius:3px;overflow:hidden;margin-bottom:8px}
@@ -113,6 +117,8 @@ h1{font-size:24px;font-weight:600;text-align:center;margin-bottom:12px}
       <span class="fact" data-i="f3">6 типов личности</span>
       <span class="fact" data-i="f4">Рекомендации программ</span>
     </div>
+    <div class="field"><label data-i="fioLabel">ФИО</label>
+      <input id="fio" class="fio" type="text" autocomplete="name" maxlength="120" placeholder="Иванов Иван" data-ip="fioPh"></div>
     <button class="cta" id="start" data-i="start">Начать тест</button>
     <p class="priv" data-i="priv">Здесь нет правильных и неправильных ответов. Не думайте о зарплате или престиже —
       отвечайте только о том, было бы вам интересно само занятие.</p>
@@ -142,6 +148,7 @@ h1{font-size:24px;font-weight:600;text-align:center;margin-bottom:12px}
     <div id="progs"></div>
     <div class="actions">
       <button class="cta" id="discuss" data-i="discuss">Обсудить результаты с ИИ-консультантом</button>
+      <button class="ghost" id="download" data-i="download">Скачать результаты</button>
       <button class="ghost" id="retake" data-i="retake">Пройти заново</button>
     </div>
     <p class="note" data-i="note">Тест носит рекомендательный характер и не заменяет консультацию приёмной комиссии.</p>
@@ -185,7 +192,7 @@ match:'соответствие',qOf:(a,b)=>`Вопрос ${a} из ${b}`,unansw
 cTitle:'Согласие на обработку данных',cP1:'Чтобы пройти тест, подтвердите согласие на обработку ваших ответов и результатов.',
 cL1:'ответы и результаты сохраняются и используются вузом для профориентации и улучшения сервиса;',
 cL2:'результаты будут доступны ИИ-консультанту, чтобы давать персональные рекомендации;',
-cL3:'данные обезличены: не вводите персональные данные, тест их не запрашивает.',
+cL3:'вы указываете ФИО — оно сохраняется вместе с результатами, чтобы вуз знал, кто проходил тест;',fioLabel:'ФИО',fioPh:'Напишите имя и фамилию',fioReq:'Пожалуйста, введите ФИО, чтобы начать тест.',download:'Скачать результаты',
 cBtn:'Принимаю и продолжить',cNote:'Нажимая кнопку, вы соглашаетесь на сбор и обработку результатов теста.'},
 ky:{title:'Кесипке багыттоо тести',back:'← консультантка',h1:'Кайсы багыт сизге туура келет?',
 lead:'Голланд методикасы боюнча кесипке багыттоо тести (O*NET Interest Profiler адаптациясы). Ар бир иш-аракет канчалык жагаарын баалаңыз — кызыгуу профилин жана Ала-Тоо университетинин ылайыктуу программаларын аласыз.',
@@ -199,7 +206,7 @@ match:'дал келүү',qOf:(a,b)=>`${b} суроонун ${a}-сы`,unanswere
 cTitle:'Маалыматты иштетүүгө макулдук',cP1:'Тесттен өтүү үчүн жоопторуңузду жана жыйынтыктарды иштетүүгө макулдугуңузду ырастаңыз.',
 cL1:'жооптор жана жыйынтыктар сакталып, ЖОЖ тарабынан кесипке багыттоо жана сервисти жакшыртуу үчүн колдонулат;',
 cL2:'жыйынтыктар жеке сунуштарды берүү үчүн AI-консультантка жеткиликтүү болот;',
-cL3:'маалыматтар жашыруун: жеке маалыматтарды киргизбеңиз, тест аларды сурабайт.',
+cL3:'сиз аты-жөнүңүздү көрсөтөсүз — ал жыйынтыктар менен бирге сакталат, ким тапшырганын вуз билиши үчүн;',fioLabel:'Аты-жөнү',fioPh:'Атыңызды жана фамилияңызды жазыңыз',fioReq:'Тестти баштоо үчүн аты-жөнүңүздү жазыңыз.',download:'Жыйынтыкты жүктөп алуу',
 cBtn:'Макулмун, улантуу',cNote:'Баскычты басуу менен тест жыйынтыктарын чогултууга жана иштетүүгө макул болосуз.'},
 en:{title:'Career Interest Test',back:'← to consultant',h1:'Which program fits you?',
 lead:'A career interest test based on Holland\'s RIASEC model (adaptation of the O*NET Interest Profiler). Rate how much you would enjoy each activity — and get your interest profile with matching Ala-Too University programs.',
@@ -213,12 +220,13 @@ match:'match',qOf:(a,b)=>`Question ${a} of ${b}`,unanswered:'Please answer this 
 cTitle:'Data processing consent',cP1:'To take the test, please confirm consent to processing your answers and results.',
 cL1:'answers and results are stored and used by the university for career guidance and service improvement;',
 cL2:'results will be available to the AI consultant to give personalized recommendations;',
-cL3:'data is anonymous: do not enter personal data — the test never asks for it.',
+cL3:'you provide your full name — it is stored together with your results so the university knows who took the test;',fioLabel:'Full name',fioPh:'Enter your full name',fioReq:'Please enter your full name to start the test.',download:'Download results',
 cBtn:'I agree, continue',cNote:'By clicking, you consent to collection and processing of test results.'}
 };
 function t(){return I[lang]||I.ru}
 function applyI18n(){
   document.querySelectorAll('[data-i]').forEach(el=>{const k=el.dataset.i;if(t()[k])el.textContent=t()[k];});
+  document.querySelectorAll('[data-ip]').forEach(el=>{const k=el.dataset.ip;if(t()[k])el.placeholder=t()[k];});
   document.querySelectorAll('.lng').forEach(b=>b.classList.toggle('on',b.dataset.lang===lang));
   document.documentElement.lang=lang;
 }
@@ -265,6 +273,8 @@ $('scale').addEventListener('click',e=>{
 });
 $('prev').onclick=()=>{if(idx>0){idx--;renderQ();}};
 $('start').onclick=async()=>{
+  const nm=$('fio').value.trim();
+  if(nm.length<3){alert(t().fioReq||'Пожалуйста, введите ФИО.');$('fio').focus();return;}
   if(!consent){$('overlay').classList.remove('hidden');return;}
   if(!questions.length)await loadQuestions();
   idx=0;show('quiz');renderQ();
@@ -279,7 +289,7 @@ async function submit(){
     alert(t().unanswered||'Пожалуйста, ответьте на этот вопрос.');return;}
   $('pfill').style.width='100%';
   const r=await fetch('/riasec/api/submit',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({answers,lang,chat_id:chatId||null,consent})});
+    body:JSON.stringify({answers,lang,chat_id:chatId||null,consent,name:$('fio').value.trim()})});
   if(!r.ok){alert('Ошибка отправки. Попробуйте ещё раз.');return;}
   lastResult=await r.json();
   renderResults(lastResult);
@@ -304,6 +314,33 @@ function renderResults(R){
     <div class="m">${p.match}% ${t().match}</div></div>`).join('');
 }
 $('retake').onclick=()=>{answers={};idx=0;show('quiz');renderQ();};
+$('download').onclick=()=>{ if(lastResult) downloadResult(lastResult); };
+function downloadResult(R){
+  const nm=($('fio')?$('fio').value.trim():'')||(R.name||'');
+  const L=[];
+  L.push('Ала-Тоо Университет — Тест профориентации (RIASEC)');
+  if(nm) L.push('ФИО: '+nm);
+  L.push('Дата: '+new Date().toLocaleString());
+  L.push('');
+  L.push('Код Голланда: '+R.code+'  ('+R.code.split('').map(c=>R.types[c].name).join(', ')+')');
+  L.push('');
+  L.push('Профиль по 6 типам:');
+  R.ranked.forEach(c=>L.push('  '+c+' '+R.types[c].name+': '+R.percents[c]+'%'));
+  L.push('');
+  L.push('Ведущие типы:');
+  R.code.split('').forEach(c=>L.push('  '+c+' — '+R.types[c].name+': '+R.types[c].desc));
+  L.push('');
+  L.push('Рекомендованные программы Ала-Тоо:');
+  R.recommendations.forEach(p=>L.push('  • '+p.program+' ('+p.faculty+') — '+p.match+'% '+t().match));
+  L.push('');
+  L.push('Тест носит рекомендательный характер и не заменяет консультацию приёмной комиссии.');
+  const blob=new Blob([L.join('\n')],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='riasec_'+(R.code||'result')+(nm?'_'+nm.replace(/\s+/g,'_'):'')+'.txt';
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
 $('discuss').onclick=()=>{
   if(!lastResult)return;
   const u=new URL('/',location.origin);

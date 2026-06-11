@@ -70,6 +70,12 @@ def test_summary_for_llm():
     assert "Рекомендованные программы" in s
 
 
+def test_summary_for_llm_includes_name():
+    r = riasec.score(_answers({"I": 5, "C": 4, "R": 3, "A": 2, "S": 3, "E": 4}))
+    s = riasec.summary_for_llm(r, name="Иванов Иван")
+    assert "ФИО абитуриента: Иванов Иван" in s
+
+
 # ------------------------------------------------------------------- API ---
 @pytest.fixture()
 def client(monkeypatch):
@@ -105,6 +111,17 @@ def test_api_submit_and_result_roundtrip(client):
     from app import logging_store
     msgs = logging_store.session_messages("chat-t1")
     assert any(x["source"] == "riasec-test" for x in msgs)
+
+
+def test_api_submit_stores_name(client):
+    ans = _answers({"I": 5, "C": 4, "R": 3, "A": 2, "S": 3, "E": 4})
+    res = client.post("/riasec/api/submit",
+                      json={"answers": ans, "lang": "ru", "chat_id": "chat-name",
+                            "consent": True, "name": "Петров Пётр"})
+    assert res.status_code == 200
+    assert res.json()["name"] == "Петров Пётр"
+    got = client.get(f"/riasec/api/result?id={res.json()['result_id']}")
+    assert got.json()["name"] == "Петров Пётр"
 
 
 def test_api_submit_incomplete_422(client):

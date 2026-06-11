@@ -52,7 +52,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Ar
 .col{max-width:760px;margin:0 auto;padding:0 22px;display:flex;flex-direction:column;gap:18px}
 .row{display:flex;gap:12px}.row.me{flex-direction:row-reverse}
 .av{width:30px;height:30px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;font-size:11px;font-weight:600}
-.av.ai{background:#ececec;color:#111}.av.ai svg{width:17px;height:17px}.av.me{background:#3a3a3a;color:#ddd}
+.av.ai{background:#fff;color:#111;overflow:hidden}.av.ai img{width:100%;height:100%;object-fit:contain}
 .tx{font-size:15.5px;line-height:1.7}
 .row.me .tx{background:var(--surf2);border-radius:14px;padding:11px 15px;max-width:80%}
 .row.ai .tx{flex:1;padding-top:3px}
@@ -64,7 +64,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Ar
 .typing i:nth-child(2){animation-delay:.18s}.typing i:nth-child(3){animation-delay:.36s}
 @keyframes b{0%,60%,100%{transform:translateY(0);opacity:.5}30%{transform:translateY(-6px);opacity:1}}
 .dock{padding:12px 22px 18px}
-.dbox{max-width:760px;margin:0 auto;display:flex;align-items:flex-end;gap:10px;background:var(--surf);border:1px solid var(--line);border-radius:24px;padding:9px 9px 9px 16px}
+.dbox{max-width:760px;margin:0 auto;display:flex;align-items:center;gap:10px;background:var(--surf);border:1px solid var(--line);border-radius:24px;padding:9px 9px 9px 16px}
 .dbox textarea{flex:1;background:none;border:0;outline:0;color:var(--txt);font-size:15px;resize:none;max-height:120px;line-height:1.4;font-family:inherit}
 .dbox textarea::placeholder{color:#7c7c7c}
 .foot{max-width:760px;margin:8px auto 0;text-align:center;font-size:11px;color:#6f6f6f}
@@ -152,9 +152,9 @@ $('agree').onclick=()=>{localStorage.setItem('alatoo_consent',new Date().toISOSt
 
 /* ---- local chat store ---- */
 function uuid(){return crypto.randomUUID?crypto.randomUUID():'c'+Date.now()+Math.random().toString(16).slice(2);}
-let chats=[];try{localStorage.removeItem('alatoo_chats');}catch(e){}
+let chats=[];try{localStorage.removeItem('alatoo_chats');chats=JSON.parse(sessionStorage.getItem('alatoo_chat')||'[]');}catch(e){}
 let curId=null;
-function save(){}
+function save(){try{sessionStorage.setItem('alatoo_chat',JSON.stringify(chats.slice(0,20)));}catch(e){}}
 function cur(){return chats.find(c=>c.id===curId);}
 function renderHist(){ histList.innerHTML=''; }
 function newChat(){curId=uuid();chats.unshift({id:curId,title:'',msgs:[]});col.innerHTML='';save();renderHist();showWelcome();}
@@ -179,7 +179,7 @@ function md(t){let s=esc(t);
 
 function addBubble(role,html){
   const r=document.createElement('div');r.className='row '+(role==='user'?'me':'ai');
-  r.innerHTML=`<div class="av ${role==='user'?'me':'ai'}">${role==='user'?'Я':aiSVG}</div><div class="tx">${html}</div>`;
+  r.innerHTML=(role==='user'?'':`<div class="av ai"><img src="/logo.png" alt="AI" onerror="this.parentNode.textContent='AI'"></div>`)+`<div class="tx">${html}</div>`;
   col.appendChild(r);col.parentElement.scrollTop=col.parentElement.scrollHeight;
   return r.querySelector('.tx');
 }
@@ -270,7 +270,7 @@ const _qp=new URLSearchParams(location.search);
 const _rid=_qp.get('riasec');
 if(_rid){
   initRiasec(_rid).then(ok=>{if(!ok){newChat();}});
-}else{newChat();}
+}else if(chats.length){openChat(chats[0].id);}else{newChat();}
 </script>
 </body>
 </html>

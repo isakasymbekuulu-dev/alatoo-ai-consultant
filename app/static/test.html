@@ -192,7 +192,7 @@ match:'соответствие',qOf:(a,b)=>`Вопрос ${a} из ${b}`,unansw
 cTitle:'Согласие на обработку данных',cP1:'Чтобы пройти тест, подтвердите согласие на обработку ваших ответов и результатов.',
 cL1:'ответы и результаты сохраняются и используются вузом для профориентации и улучшения сервиса;',
 cL2:'результаты будут доступны ИИ-консультанту, чтобы давать персональные рекомендации;',
-cL3:'вы указываете ФИО — оно сохраняется вместе с результатами, чтобы вуз знал, кто проходил тест;',fioLabel:'ФИО',fioPh:'Напишите имя и фамилию',fioReq:'Пожалуйста, введите ФИО, чтобы начать тест.',download:'Скачать результаты',
+cL3:'вы указываете ФИО — оно сохраняется вместе с результатами, чтобы вуз знал, кто проходил тест;',fioLabel:'ФИО',fioPh:'Напишите имя и фамилию',fioReq:'Пожалуйста, введите ФИО, чтобы начать тест.',download:'Скачать результаты',pdfTitle:'Результаты теста профориентации',pdfUniv:'Ала-Тоо Университет',pdfDate:'Дата',pdfProfile:'Профиль по 6 типам',pdfTop:'Ведущие типы',popupBlocked:'Разрешите всплывающие окна, чтобы сохранить PDF.',
 cBtn:'Принимаю и продолжить',cNote:'Нажимая кнопку, вы соглашаетесь на сбор и обработку результатов теста.'},
 ky:{title:'Кесипке багыттоо тести',back:'← консультантка',h1:'Кайсы багыт сизге туура келет?',
 lead:'Голланд методикасы боюнча кесипке багыттоо тести (O*NET Interest Profiler адаптациясы). Ар бир иш-аракет канчалык жагаарын баалаңыз — кызыгуу профилин жана Ала-Тоо университетинин ылайыктуу программаларын аласыз.',
@@ -206,7 +206,7 @@ match:'дал келүү',qOf:(a,b)=>`${b} суроонун ${a}-сы`,unanswere
 cTitle:'Маалыматты иштетүүгө макулдук',cP1:'Тесттен өтүү үчүн жоопторуңузду жана жыйынтыктарды иштетүүгө макулдугуңузду ырастаңыз.',
 cL1:'жооптор жана жыйынтыктар сакталып, ЖОЖ тарабынан кесипке багыттоо жана сервисти жакшыртуу үчүн колдонулат;',
 cL2:'жыйынтыктар жеке сунуштарды берүү үчүн AI-консультантка жеткиликтүү болот;',
-cL3:'сиз аты-жөнүңүздү көрсөтөсүз — ал жыйынтыктар менен бирге сакталат, ким тапшырганын вуз билиши үчүн;',fioLabel:'Аты-жөнү',fioPh:'Атыңызды жана фамилияңызды жазыңыз',fioReq:'Тестти баштоо үчүн аты-жөнүңүздү жазыңыз.',download:'Жыйынтыкты жүктөп алуу',
+cL3:'сиз аты-жөнүңүздү көрсөтөсүз — ал жыйынтыктар менен бирге сакталат, ким тапшырганын вуз билиши үчүн;',fioLabel:'Аты-жөнү',fioPh:'Атыңызды жана фамилияңызды жазыңыз',fioReq:'Тестти баштоо үчүн аты-жөнүңүздү жазыңыз.',download:'Жыйынтыкты жүктөп алуу',pdfTitle:'Кесипке багыттоо тестинин жыйынтыгы',pdfUniv:'Ала-Тоо Университети',pdfDate:'Күнү',pdfProfile:'6 тип боюнча профиль',pdfTop:'Негизги типтер',popupBlocked:'PDF сактоо үчүн калкып чыкма терезелерге уруксат бериңиз.',
 cBtn:'Макулмун, улантуу',cNote:'Баскычты басуу менен тест жыйынтыктарын чогултууга жана иштетүүгө макул болосуз.'},
 en:{title:'Career Interest Test',back:'← to consultant',h1:'Which program fits you?',
 lead:'A career interest test based on Holland\'s RIASEC model (adaptation of the O*NET Interest Profiler). Rate how much you would enjoy each activity — and get your interest profile with matching Ala-Too University programs.',
@@ -220,7 +220,7 @@ match:'match',qOf:(a,b)=>`Question ${a} of ${b}`,unanswered:'Please answer this 
 cTitle:'Data processing consent',cP1:'To take the test, please confirm consent to processing your answers and results.',
 cL1:'answers and results are stored and used by the university for career guidance and service improvement;',
 cL2:'results will be available to the AI consultant to give personalized recommendations;',
-cL3:'you provide your full name — it is stored together with your results so the university knows who took the test;',fioLabel:'Full name',fioPh:'Enter your full name',fioReq:'Please enter your full name to start the test.',download:'Download results',
+cL3:'you provide your full name — it is stored together with your results so the university knows who took the test;',fioLabel:'Full name',fioPh:'Enter your full name',fioReq:'Please enter your full name to start the test.',download:'Download results',pdfTitle:'Career interest test results',pdfUniv:'Ala-Too University',pdfDate:'Date',pdfProfile:'Profile across 6 types',pdfTop:'Leading types',popupBlocked:'Please allow pop-ups to save the PDF.',
 cBtn:'I agree, continue',cNote:'By clicking, you consent to collection and processing of test results.'}
 };
 function t(){return I[lang]||I.ru}
@@ -316,30 +316,28 @@ function renderResults(R){
 $('retake').onclick=()=>{answers={};idx=0;show('quiz');renderQ();};
 $('download').onclick=()=>{ if(lastResult) downloadResult(lastResult); };
 function downloadResult(R){
+  const T=t();
   const nm=($('fio')?$('fio').value.trim():'')||(R.name||'');
-  const L=[];
-  L.push('Ала-Тоо Университет — Тест профориентации (RIASEC)');
-  if(nm) L.push('ФИО: '+nm);
-  L.push('Дата: '+new Date().toLocaleString());
-  L.push('');
-  L.push('Код Голланда: '+R.code+'  ('+R.code.split('').map(c=>R.types[c].name).join(', ')+')');
-  L.push('');
-  L.push('Профиль по 6 типам:');
-  R.ranked.forEach(c=>L.push('  '+c+' '+R.types[c].name+': '+R.percents[c]+'%'));
-  L.push('');
-  L.push('Ведущие типы:');
-  R.code.split('').forEach(c=>L.push('  '+c+' — '+R.types[c].name+': '+R.types[c].desc));
-  L.push('');
-  L.push('Рекомендованные программы Ала-Тоо:');
-  R.recommendations.forEach(p=>L.push('  • '+p.program+' ('+p.faculty+') — '+p.match+'% '+t().match));
-  L.push('');
-  L.push('Тест носит рекомендательный характер и не заменяет консультацию приёмной комиссии.');
-  const blob=new Blob([L.join('\n')],{type:'text/plain;charset=utf-8'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download='riasec_'+(R.code||'result')+(nm?'_'+nm.replace(/\s+/g,'_'):'')+'.txt';
-  document.body.appendChild(a);a.click();a.remove();
-  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  const e=x=>String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const codeNames=R.code.split('').map(c=>e(R.types[c].name)).join(' \u00b7 ');
+  const bars=R.ranked.map(c=>'<tr><td class="l">'+e(c)+' '+e(R.types[c].name)+'</td><td class="b"><span style="width:'+Math.max(3,R.percents[c])+'%"></span></td><td class="p">'+R.percents[c]+'%</td></tr>').join('');
+  const tops=R.code.split('').map(c=>'<div class="td"><b>'+e(c)+' \u2014 '+e(R.types[c].name)+'</b><p>'+e(R.types[c].desc)+'</p></div>').join('');
+  const progs=R.recommendations.map((p,i)=>'<div class="pr"><span><b class="i">'+(i+1)+'.</b> '+e(p.program)+' <i>'+e(p.faculty)+'</i></span><b>'+p.match+'% '+e(T.match)+'</b></div>').join('');
+  const css="*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#1a1a1a;background:#fff}.wrap{max-width:720px;margin:0 auto;padding:34px 30px}.hd{text-align:center;border-bottom:2px solid #111;padding-bottom:14px;margin-bottom:18px}.hd .u{font-size:12px;letter-spacing:1px;color:#777;text-transform:uppercase}.hd h1{font-size:21px;margin-top:6px}.meta{display:flex;gap:26px;justify-content:center;font-size:13px;color:#333;margin-bottom:18px}.meta s{color:#999;text-decoration:none}.code{text-align:center;margin:16px 0 22px}.code .lbl{font-size:11px;color:#999;text-transform:uppercase;letter-spacing:1px}.code .big{font-size:38px;font-weight:700;letter-spacing:8px;margin:4px 0}.code .nm{font-size:13px;color:#555}h2{font-size:14px;margin:20px 0 9px;padding-bottom:5px;border-bottom:1px solid #ddd}table.bars{width:100%;border-collapse:collapse}table.bars td{padding:4px 0;font-size:13px;vertical-align:middle}td.l{width:185px}td.b{padding:0 10px}td.b span{display:inline-block;height:11px;background:#111;border-radius:3px;vertical-align:middle;min-width:3px}td.p{width:46px;text-align:right;color:#555}.td{border:1px solid #ddd;border-radius:8px;padding:10px 12px;margin-bottom:7px}.td b{font-size:13px}.td p{font-size:12px;color:#444;margin-top:3px;line-height:1.5}.pr{display:flex;justify-content:space-between;gap:12px;border:1px solid #eee;border-radius:8px;padding:9px 12px;margin-bottom:6px;font-size:12.5px}.pr i{color:#777;font-style:normal}.pr .i{color:#999}.pr b{white-space:nowrap}.note{margin-top:20px;font-size:11px;color:#999;text-align:center;line-height:1.5}@media print{.wrap{max-width:none;padding:0 6px}}";
+  const html='<!doctype html><html lang="'+lang+'"><head><meta charset="utf-8"><title>'+e(T.pdfTitle)+(nm?' \u2014 '+e(nm):'')+'</title><style>'+css+'</style></head>'
+    +'<body onload="setTimeout(function(){window.focus();window.print();},200)">'
+    +'<div class="wrap">'
+    +'<div class="hd"><div class="u">'+e(T.pdfUniv)+'</div><h1>'+e(T.pdfTitle)+'</h1></div>'
+    +'<div class="meta">'+(nm?'<div><s>'+e(T.fioLabel)+':</s> '+e(nm)+'</div>':'')+'<div><s>'+e(T.pdfDate)+':</s> '+new Date().toLocaleDateString()+'</div></div>'
+    +'<div class="code"><div class="lbl">'+e(T.rcodeLabel)+'</div><div class="big">'+R.code.split('').join(' ')+'</div><div class="nm">'+codeNames+'</div></div>'
+    +'<h2>'+e(T.pdfProfile)+'</h2><table class="bars">'+bars+'</table>'
+    +'<h2>'+e(T.pdfTop)+'</h2>'+tops
+    +'<h2>'+e(T.recHead)+'</h2>'+progs
+    +'<p class="note">'+e(T.note)+'</p>'
+    +'</div></body></html>';
+  const w=window.open('','_blank');
+  if(!w){alert(T.popupBlocked||'Разрешите всплывающие окна, чтобы сохранить PDF.');return;}
+  w.document.open();w.document.write(html);w.document.close();
 }
 $('discuss').onclick=()=>{
   if(!lastResult)return;

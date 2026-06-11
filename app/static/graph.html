@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Граф диалога и аналитика · AlaTooGPT</title>
+<style>
+:root{--bg:#0d0d0d;--surf:#1a1a1a;--surf2:#222;--line:#2b2b2b;--txt:#ececec;--mut:#9a9a9a;--acc:#ececec}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--txt);padding:22px 18px;max-width:1000px;margin:0 auto}
+h1{font-size:20px;font-weight:600;margin-bottom:4px}
+.sub{color:var(--mut);font-size:13px;margin-bottom:18px}
+.sub a{color:#cfcfcf}
+h2{font-size:15px;margin:24px 0 10px;font-weight:600}
+.card{background:var(--surf);border:1px solid var(--line);border-radius:12px;padding:16px}
+.cards{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+.kpi{flex:1;min-width:130px;background:var(--surf);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.kpi .n{font-size:26px;font-weight:700}
+.kpi .l{font-size:12px;color:var(--mut);margin-top:2px}
+svg{width:100%;height:auto;background:var(--surf);border:1px solid var(--line);border-radius:12px}
+.node rect{fill:#202020;stroke:#3a3a3a}
+.node.router rect{fill:#2a2a2a;stroke:#666}
+.node text{fill:#ececec;font-size:13px}
+.node .d{fill:#9a9a9a;font-size:10.5px}
+.edge{stroke:#555;stroke-width:1.5;fill:none;marker-end:url(#arr)}
+.elabel{fill:#8a8a8a;font-size:10px}
+.bars{display:flex;flex-direction:column;gap:7px}
+.brow{display:grid;grid-template-columns:120px 1fr 46px;align-items:center;gap:10px;font-size:13px}
+.btrack{height:18px;background:#222;border-radius:5px;overflow:hidden}
+.bfill{height:100%;background:#cfcfcf;border-radius:5px}
+.brow .v{text-align:right;color:var(--mut)}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mut);font-weight:500}
+.tag{display:inline-block;padding:1px 8px;border-radius:20px;font-size:11px;border:1px solid #3a3a3a;background:#202020}
+.tag.rag{color:#9ecbff}.tag.riasec{color:#ffd591}.tag.general{color:#b7eb8f}
+.q{color:#cfcfcf}.steps{color:#8a8a8a}
+.err{color:#ff8080}
+</style>
+</head>
+<body>
+<h1>Граф диалога и аналитика</h1>
+<div class="sub" id="sub">LangGraph-оркестрация · <a href="#" id="back">← к логам</a></div>
+
+<h2>Граф LangGraph</h2>
+<svg id="graph" viewBox="0 0 900 430" role="img" aria-label="Граф диалога">
+  <defs><marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+    <path d="M0,0 L7,3 L0,6 Z" fill="#666"/></marker></defs>
+  <g id="gedges"></g><g id="gnodes"></g>
+</svg>
+
+<h2>Аналитика</h2>
+<div class="cards" id="kpis"></div>
+<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:6px">
+  <div class="card" style="flex:1;min-width:260px"><div style="font-size:13px;color:var(--mut);margin-bottom:9px">Распределение намерений (роутер)</div><div class="bars" id="intents"></div></div>
+  <div class="card" style="flex:1;min-width:260px"><div style="font-size:13px;color:var(--mut);margin-bottom:9px">Топ кодов Голланда (RIASEC)</div><div class="bars" id="codes"></div></div>
+</div>
+
+<h2>Последние трассировки</h2>
+<div class="card" style="padding:0;overflow:auto">
+  <table><thead><tr><th>Время</th><th>Сессия</th><th>Намерение</th><th>Запрос</th><th>Путь по узлам</th><th>Фр.</th></tr></thead>
+  <tbody id="traces"></tbody></table>
+</div>
+
+<script>
+const token=new URLSearchParams(location.search).get('token')||'';
+document.getElementById('back').href='/admin/logs?token='+encodeURIComponent(token);
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+async function api(p){const r=await fetch(p+(p.includes('?')?'&':'?')+'token='+encodeURIComponent(token));
+  if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}
+
+// ---- graph diagram (fixed layout, edges from spec) ----
+const POS={
+  START:{x:400,y:18,w:100,h:34,t:'START',cls:''},
+  router:{x:370,y:92,w:160,h:54,cls:'router'},
+  rag:{x:90,y:235,w:200,h:60},
+  riasec:{x:350,y:235,w:200,h:60},
+  general:{x:610,y:235,w:200,h:60},
+  END:{x:400,y:372,w:100,h:34,t:'END',cls:''},
+};
+function cx(n){return n.x+n.w/2}
+function drawGraph(spec){
+  const byId={}; (spec.nodes||[]).forEach(n=>byId[n.id]=n);
+  const ge=$('gedges'), gn=$('gnodes');
+  (spec.edges||[]).forEach(e=>{
+    const a=POS[e.from], b=POS[e.to]; if(!a||!b)return;
+    const x1=cx(a), y1=a.y+a.h, x2=cx(b), y2=b.y;
+    const my=(y1+y2)/2;
+    const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('class','edge');
+    p.setAttribute('d',`M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}`);
+    ge.appendChild(p);
+    if(e.cond){const t=document.createElementNS('http://www.w3.org/2000/svg','text');
+      t.setAttribute('class','elabel');t.setAttribute('x',(x1+x2)/2+4);t.setAttribute('y',my);
+      t.textContent=e.cond;ge.appendChild(t);}
+  });
+  Object.keys(POS).forEach(id=>{
+    const n=POS[id], spc=byId[id];
+    const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.setAttribute('class','node '+(n.cls||''));
+    const r=document.createElementNS('http://www.w3.org/2000/svg','rect');
+    r.setAttribute('x',n.x);r.setAttribute('y',n.y);r.setAttribute('width',n.w);r.setAttribute('height',n.h);r.setAttribute('rx',9);
+    g.appendChild(r);
+    const t=document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x',cx(n));t.setAttribute('y',n.y+(spc?22:21));t.setAttribute('text-anchor','middle');
+    t.textContent=spc?spc.label:(n.t||id); g.appendChild(t);
+    if(spc&&spc.desc){const d=document.createElementNS('http://www.w3.org/2000/svg','text');
+      d.setAttribute('class','d');d.setAttribute('x',cx(n));d.setAttribute('y',n.y+40);d.setAttribute('text-anchor','middle');
+      d.textContent=spc.desc.length>34?spc.desc.slice(0,33)+'…':spc.desc; g.appendChild(d);}
+    gn.appendChild(g);
+  });
+}
+function bars(el,items,key){
+  const max=Math.max(1,...items.map(i=>i.n));
+  el.innerHTML=items.length?items.map(i=>`<div class="brow"><span>${esc(i[key])}</span>
+    <div class="btrack"><div class="bfill" style="width:${Math.round(100*i.n/max)}%"></div></div>
+    <span class="v">${i.n}</span></div>`).join(''):'<span style="color:#777;font-size:12px">нет данных</span>';
+}
+async function load(){
+  try{
+    const [g,a,tr]=await Promise.all([api('/admin/api/graph'),api('/admin/api/analytics'),api('/admin/api/traces')]);
+    drawGraph(g);
+    $('kpis').innerHTML=[
+      ['Диалогов',a.sessions],['Сообщений',a.messages],['Тестов RIASEC',a.tests],['Конверсия тест→чат',a.conversion+'%']
+    ].map(([l,n])=>`<div class="kpi"><div class="n">${esc(n)}</div><div class="l">${l}</div></div>`).join('');
+    bars($('intents'),a.intents||[],'intent');
+    bars($('codes'),a.codes||[],'code');
+    const rows=(tr.traces||[]);
+    $('traces').innerHTML=rows.length?rows.map(t=>`<tr>
+      <td>${esc((t.ts||'').replace('T',' ').replace('Z',''))}</td>
+      <td title="${esc(t.session_id)}">${esc((t.session_id||'').slice(0,10))}</td>
+      <td><span class="tag ${esc(t.intent)}">${esc(t.intent)}</span></td>
+      <td class="q">${esc((t.query||'').slice(0,60))}</td>
+      <td class="steps">${esc((t.steps||[]).join('  →  '))}</td>
+      <td>${esc(t.n_chunks)}</td></tr>`).join(''):'<tr><td colspan="6" style="color:#777">пока нет трассировок</td></tr>';
+  }catch(e){
+    $('sub').innerHTML='<span class="err">Ошибка доступа ('+esc(e.message)+'). Проверьте ?token=… в адресе.</span>';
+  }
+}
+load();
+</script>
+</body>
+</html>

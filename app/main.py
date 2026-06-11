@@ -16,6 +16,7 @@ from app import logging_store, riasec
 from app.config import settings
 from app.llm import chat, chat_stream
 from app.rag import build_messages
+from app.graph import run_graph, GRAPH_SPEC
 
 app = FastAPI(title="AlaToo AI Consultant")
 logging_store.init()
@@ -140,7 +141,7 @@ async def chat_completions(
         riasec_summary = riasec.summary_for_llm(result, name=stored.get("name"))
 
     history = [{"role": m.role, "content": m.content} for m in req.messages]
-    messages, chunks = build_messages(history, riasec_summary=riasec_summary)
+    messages, chunks, intent, trace = run_graph(history, riasec_summary=riasec_summary)
     user_turns = [m for m in history if m.get("role") == "user"]
     last_user = user_turns[-1]["content"] if user_turns else ""
 
@@ -148,6 +149,7 @@ async def chat_completions(
     source = x_client or "openwebui"
     consent = x_consent == "1"
     sources = _sources_summary(chunks)
+    logging_store.save_trace(session_id, intent, last_user, trace, len(chunks))
 
     cid = f"chatcmpl-{uuid.uuid4().hex[:24]}"
     created = int(time.time())
@@ -305,3 +307,32 @@ def admin_logs(token: str = Query(default="")):
     if page.exists():
         return HTMLResponse(page.read_text(encoding="utf-8"))
     return HTMLResponse("<p>admin.html not found</p>", status_code=404)
+
+
+@app.get("/admin/api/graph")
+def admin_graph(token: str = Query(default="")):
+    _admin_ok(token)
+    return GRAPH_SPEC
+
+
+@app.get("/admin/api/traces")
+def admin_traces(token: str = Query(default=""), session_id: str = Query(default="")):
+    _admin_ok(token)
+    if session_id:
+        return {"traces": logging_store.traces_for_session(session_id)}
+    return {"traces": logging_store.recent_traces()}
+
+
+@app.get("/admin/api/analytics")
+def admin_analytics(token: str = Query(default="")):
+    _admin_ok(token)
+    return logging_store.analytics()
+
+
+@app.get("/admin/graph", response_class=HTMLResponse)
+def admin_graph_page(token: str = Query(default="")):
+    _admin_ok(token)
+    page = STATIC_DIR / "graph.html"
+    if page.exists():
+        return HTMLResponse(page.read_text(encoding="utf-8"))
+    return HTMLResponse("<p>graph.html not found</p>", status_code=404)

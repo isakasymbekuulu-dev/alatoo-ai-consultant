@@ -54,6 +54,20 @@ def init() -> None:
             cols = [r[1] for r in c.execute("PRAGMA table_info(riasec_results)").fetchall()]
             if "name" not in cols:
                 c.execute("ALTER TABLE riasec_results ADD COLUMN name TEXT")
+            c.execute(
+                """
+                CREATE TABLE IF NOT EXISTS graph_traces (
+                    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ts         TEXT,
+                    session_id TEXT,
+                    intent     TEXT,
+                    query      TEXT,
+                    steps      TEXT,
+                    n_chunks   INTEGER
+                )
+                """
+            )
+            c.execute("CREATE INDEX IF NOT EXISTS idx_trace_session ON graph_traces(session_id)")
     except Exception as e:
         print(f"[log] init failed: {e}")
 
@@ -201,3 +215,96 @@ def stats() -> dict:
         return {"messages": total, "sessions": sessions}
     except Exception:
         return {"messages": 0, "sessions": 0}
+
+
+def save_trace(session_id, intent, query, steps, n_chunks) -> None:
+    try:
+        with _lock, _connect() as c:
+            c.execute(
+                "INSERT INTO graph_traces (ts, session_id, intent, query, steps, n_chunks) "
+                "VALUES (?,?,?,?,?,?)",
+                (
+                    time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    session_id or "anon",
+                    intent or "",
+                    (query or "")[:500],
+                    json.dumps(steps or [], ensure_ascii=False),
+                    int(n_chunks or 0),
+                ),
+            )
+    except Exception as e:
+        print(f"[log] trace write failed: {e}")
+
+
+def _trace_rows(rows) -> List[dict]:
+    cols = ["id", "ts", "session_id", "intent", "query", "steps", "n_chunks"]
+    out = []
+    for r in rows:
+        d = dict(zip(cols, r))
+        try:
+            d["steps"] = json.loads(d["steps"] or "[]")
+        except Exception:
+            d["steps"] = []
+        out.append(d)
+    return out
+
+
+def traces_for_session(session_id: str) -> List[dict]:
+    try:
+        with _lock, _connect() as c:
+            rows = c.execute(
+                "SELECT id, ts, session_id, intent, query, steps, n_chunks "
+                "FROM graph_traces WHERE session_id = ? ORDER BY id ASC",
+                (session_id,),
+            ).fetchall()
+        return _trace_rows(rows)
+    except Exception as e:
+        print(f"[log] traces read failed: {e}")
+        return []
+
+
+def recent_traces(limit: int = 100) -> List[dict]:
+    try:
+        with _lock, _connect() as c:
+            rows = c.execute(
+                "SELECT id, ts, session_id, intent, query, steps, n_chunks "
+                "FROM graph_traces ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return _trace_rows(rows)
+    except Exception as e:
+        print(f"[log] traces read failed: {e}")
+        return []
+
+
+def analytics() -> dict:
+    """Aggregate stats for the admin dashboard."""
+    out = {"messages": 0, "sessions": 0, "tests": 0,
+           "intents": [], "codes": [], "conversion": 0.0}
+    try:
+        with _lock, _connect() as c:
+            out["messages"] = c.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
+            out["sessions"] = c.execute("SELECT COUNT(DISTINCT session_id) FROM messages").fetchone()[0]
+            out["tests"] = c.execute("SELECT COUNT(*) FROM riasec_results").fetchone()[0]
+            out["intents"] = [
+                {"intent": i or "—", "n": n}
+                for i, n in c.execute(
+                    "SELECT intent, COUNT(*) FROM graph_traces GROUP BY intent ORDER BY COUNT(*) DESC"
+                ).fetchall()
+            ]
+            out["codes"] = [
+                {"code": code or "—", "n": n}
+                for code, n in c.execute(
+                    "SELECT code, COUNT(*) FROM riasec_results GROUP BY code ORDER BY COUNT(*) DESC LIMIT 10"
+                ).fetchall()
+            ]
+            # conversion: tests whose session later had a chat turn
+            conv = c.execute(
+                "SELECT COUNT(*) FROM riasec_results r "
+                "WHERE EXISTS (SELECT 1 FROM messages m "
+                "WHERE m.session_id = r.session_id AND m.source != 'riasec-test')"
+            ).fetchone()[0]
+            out["conversion"] = round(100.0 * conv / out["tests"], 1) if out["tests"] else 0.0
+    except Exception as e:
+        print(f"[log] analytics failed: {e}")
+    return out

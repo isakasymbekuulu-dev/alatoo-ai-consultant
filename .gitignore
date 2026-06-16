@@ -6,3 +6,8 @@ venv/
 data/raw_cache/
 *.log
 .DS_Store
+
+# editor / tooling junk
+.~lock.*#
+.pytest_cache/
+pytest-cache-files-*/

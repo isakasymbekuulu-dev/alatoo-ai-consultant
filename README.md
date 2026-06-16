@@ -69,6 +69,6 @@ EMBED_DIM=1536
 ```
 и заново прогнать ingestion с `--recreate`.
 
-## Дальше (roadmap)
-RIASEC-тест (ветка LangGraph) · скрейпинг сайта (Bright Data) ·
-каналы Telegram/WhatsApp/Meta к тому же `/v1` · TLS+домен · rate-limit.
+## CI/CD (авто-деплой)
+`.github/workflows/deploy.yml` при пуше в `main` заходит на дроплет по SSH,
+делает `git reset --hard origin/main`, `docker compose up -d --bui

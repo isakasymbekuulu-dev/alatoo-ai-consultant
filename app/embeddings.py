@@ -1,15 +1,14 @@
-"""Embeddings — pluggable backend.
+"""Embeddings for hybrid retrieval, exposed as LangChain objects.
 
-- If EMBED_MODEL looks like an API model (e.g. "openai/text-embedding-3-small"),
-  embeddings are computed via GitHub Models (no local model, low RAM).
-- Otherwise EMBED_MODEL is loaded locally with sentence-transformers
-  (default: BAAI/bge-m3, dim 1024 — best multilingual ru/ky/en).
-
-The same model is used at index-time and query-time. Switch backends by
-changing EMBED_MODEL / EMBED_DIM in .env — no code change needed.
+Dense (semantic): local BGE-M3 via sentence-transformers (default; best
+multilingual ru/ky/en) or an API model (EMBED_MODEL=openai/...). Sparse
+(lexical): BM25 via FastEmbed — cheap, great for exact tokens (room numbers
+like "A315", phones, ОРТ scores). Same objects at index- and query-time.
 """
 from functools import lru_cache
 from typing import List
+
+from langchain_core.embeddings import Embeddings
 
 from app.config import settings
 
@@ -21,14 +20,29 @@ def _is_api_model(name: str) -> bool:
     return "/" in name and name.split("/", 1)[0].lower() in _API_VENDORS
 
 
-@lru_cache(maxsize=1)
-def _local_model():
-    from sentence_transformers import SentenceTransformer
-    return SentenceTransformer(settings.embed_model)
+class _LocalDense(Embeddings):
+    """BGE-M3 (sentence-transformers) as LangChain Embeddings."""
+
+    @lru_cache(maxsize=1)
+    def _model(self):
+        from sentence_transformers import SentenceTransformer
+        return SentenceTransformer(settings.embed_model)
+
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        vecs = self._model().encode(
+            texts, normalize_embeddings=True, convert_to_numpy=True,
+            show_progress_bar=False, batch_size=16,
+        )
+        return vecs.tolist()
+
+    def embed_query(self, text: str) -> List[float]:
+        return self.embed_documents([text])[0]
 
 
-def embed_texts(texts: List[str]) -> List[List[float]]:
-    if _is_api_model(settings.embed_model):
+class _ApiDense(Embeddings):
+    """API embeddings via the OpenAI-compatible client."""
+
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
         from app.llm import get_llm
         client = get_llm()
         out: List[List[float]] = []
@@ -38,16 +52,17 @@ def embed_texts(texts: List[str]) -> List[List[float]]:
             out.extend(d.embedding for d in sorted(resp.data, key=lambda d: d.index))
         return out
 
-    model = _local_model()
-    vectors = model.encode(
-        texts,
-        normalize_embeddings=True,
-        convert_to_numpy=True,
-        show_progress_bar=False,
-        batch_size=16,
-    )
-    return vectors.tolist()
+    def embed_query(self, text: str) -> List[float]:
+        return self.embed_documents([text])[0]
 
 
-def embed_query(text: str) -> List[float]:
-    return embed_texts([text])[0]
+@lru_cache(maxsize=1)
+def get_dense_embeddings() -> Embeddings:
+    return _ApiDense() if _is_api_model(settings.embed_model) else _LocalDense()
+
+
+@lru_cache(maxsize=1)
+def get_sparse_embeddings():
+    """BM25 sparse embeddings (FastEmbed). Lazily loaded/cached."""
+    from langchain_qdrant import FastEmbedSparse
+    return FastEmbedSparse(model_name=settings.sparse_model)

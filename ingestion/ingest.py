@@ -1,28 +1,45 @@
-"""Ingestion pipeline: data/ files -> clean -> chunk -> embed (BGE-M3) -> Qdrant.
+"""Ingestion pipeline (LangChain + hybrid Qdrant).
+
+    load (robust, encoding-aware) -> Documents (+metadata)
+      -> header-aware chunking (Markdown) / recursive chunking (other)
+      -> dense BGE-M3 + sparse BM25 -> QdrantVectorStore (HYBRID, recreated)
 
 Run inside the backend container:
     docker compose run --rm backend python -m ingestion.ingest
 Options:
-    --recreate   drop & recreate the collection before loading
     --data DIR   source directory (default: data)
+
+The collection is always rebuilt from scratch (hybrid named-vector schema), so
+deletions in data/ are reflected. Chunks are de-duplicated by content hash.
 """
 import argparse
 import hashlib
 import re
 import sys
-import uuid
 from pathlib import Path
 from typing import Iterable, List
 
 import ftfy
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from qdrant_client.http import models as qm
+from langchain_core.documents import Document
+from langchain_text_splitters import (
+    MarkdownHeaderTextSplitter,
+    RecursiveCharacterTextSplitter,
+)
 
 from app.config import settings
-from app.embeddings import embed_texts
-from app.qdrant_store import ensure_collection, get_client
+from app.qdrant_store import build_collection
 
 SUPPORTED = {".pdf", ".docx", ".txt", ".md", ".csv"}
+
+_RECURSIVE = RecursiveCharacterTextSplitter(
+    chunk_size=900,
+    chunk_overlap=150,
+    separators=["\n## ", "\n### ", "\n\n", "\n", ". ", " ", ""],
+)
+_MD_HEADERS = MarkdownHeaderTextSplitter(
+    headers_to_split_on=[("#", "h1"), ("##", "h2"), ("###", "h3")],
+    strip_headers=True,
+)
 
 
 # ---------- load ----------
@@ -43,9 +60,6 @@ def read_docx(path: Path) -> str:
 
 
 def raw_corruption_ratio(path: Path) -> float:
-    """Fraction of literal '?' (0x3F) bytes in the raw file. A high value means
-    the source's non-Latin text was destroyed at export time (saved to an
-    encoding that can't represent Cyrillic) — unrecoverable from this file."""
     raw = path.read_bytes()
     if not raw:
         return 1.0
@@ -53,9 +67,6 @@ def raw_corruption_ratio(path: Path) -> float:
 
 
 def read_text(path: Path) -> str:
-    """Decode robustly. BOM/UTF-8 first, then charset detection, then cp1251.
-    Deliberately avoids blind UTF-16 fallback, which would turn a file of
-    literal '?' bytes into CJK garbage and hide the corruption."""
     raw = path.read_bytes()
     if raw.startswith(b"\xef\xbb\xbf"):
         return raw.decode("utf-8-sig")
@@ -75,22 +86,12 @@ def read_text(path: Path) -> str:
 
 
 def read_csv(path: Path) -> str:
-    """Flatten a CSV into readable lines (auto-detect ; or , delimiter)."""
     text = read_text(path)
     import csv
     import io
     delim = ";" if text[:2000].count(";") >= text[:2000].count(",") else ","
     rows = csv.reader(io.StringIO(text), delimiter=delim)
     return "\n".join(" | ".join(cell.strip() for cell in row if cell.strip()) for row in rows)
-
-
-def _broken_ratio(text: str) -> float:
-    """Fraction of chars that are '?' or the replacement char — signals a file
-    whose non-ASCII content was destroyed at export time."""
-    if not text:
-        return 1.0
-    bad = text.count("?") + text.count("�")
-    return bad / len(text)
 
 
 def load_file(path: Path) -> str:
@@ -109,7 +110,7 @@ def load_file(path: Path) -> str:
 # ---------- clean ----------
 def clean_text(text: str) -> str:
     text = ftfy.fix_text(text)
-    text = text.replace("­", "")           # soft hyphens
+    text = text.replace("­", "")      # soft hyphens
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
@@ -119,7 +120,6 @@ def guess_lang(text: str) -> str:
     sample = text[:2000]
     cyr = len(re.findall(r"[а-яёңүөъ]", sample, flags=re.IGNORECASE))
     lat = len(re.findall(r"[a-z]", sample, flags=re.IGNORECASE))
-    # Kyrgyz-specific letters
     if re.search(r"[ңүөъ]", sample, flags=re.IGNORECASE):
         return "ky"
     if cyr > lat:
@@ -129,102 +129,119 @@ def guess_lang(text: str) -> str:
     return "ru"
 
 
-# ---------- chunk ----------
-def chunk_text(text: str) -> List[str]:
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=900,
-        chunk_overlap=150,
-        separators=["\n## ", "\n### ", "\n\n", "\n", ". ", " ", ""],
-    )
-    return [c.strip() for c in splitter.split_text(text) if c.strip()]
+def _broken_ratio(text: str) -> float:
+    if not text:
+        return 1.0
+    bad = text.count("?") + text.count("�")
+    return bad / len(text)
 
 
-# ---------- pipeline ----------
+# ---------- chunk -> Documents ----------
+def _faculty_from(headers: dict) -> str:
+    for v in headers.values():
+        if v and "факультет" in v.lower():
+            return v.strip()
+    return ""
+
+
+def docs_from_markdown(text: str, base_meta: dict) -> List[Document]:
+    out: List[Document] = []
+    for sec in _MD_HEADERS.split_text(text):
+        headers = {k: v for k, v in sec.metadata.items() if k in ("h1", "h2", "h3")}
+        trail = " > ".join(headers[k] for k in ("h1", "h2", "h3") if headers.get(k))
+        section = headers.get("h3") or headers.get("h2") or headers.get("h1") or ""
+        faculty = _faculty_from(headers)
+        for piece in _RECURSIVE.split_text(sec.page_content):
+            content = (trail + "\n" + piece).strip() if trail else piece.strip()
+            md = dict(base_meta)
+            md.update({"section": section, "faculty": faculty,
+                       "title": section or base_meta.get("title", "")})
+            out.append(Document(page_content=content, metadata=md))
+    return out
+
+
+def docs_from_plain(text: str, base_meta: dict) -> List[Document]:
+    return [
+        Document(page_content=p.strip(), metadata=dict(base_meta))
+        for p in _RECURSIVE.split_text(text) if p.strip()
+    ]
+
+
 def iter_files(data_dir: Path) -> Iterable[Path]:
     for p in sorted(data_dir.rglob("*")):
         if p.is_file() and p.suffix.lower() in SUPPORTED:
             yield p
 
 
+def build_documents(data_dir: Path) -> List[Document]:
+    files = list(iter_files(data_dir))
+    if not files:
+        print("[!] No supported files in " + str(data_dir), file=sys.stderr)
+        sys.exit(1)
+
+    print("[i] Found " + str(len(files)) + " files.")
+    seen = set()
+    documents: List[Document] = []
+
+    for path in files:
+        ext = path.suffix.lower()
+        if ext in (".txt", ".md", ".csv") and raw_corruption_ratio(path) >= 0.2:
+            print("  - SKIP (corrupted encoding): " + path.name)
+            continue
+        text = clean_text(load_file(path))
+        if not text:
+            print("  - skip (empty): " + path.name)
+            continue
+        if _broken_ratio(text) >= 0.2:
+            print("  - SKIP (corrupted text): " + path.name)
+            continue
+
+        lang = guess_lang(text)
+        base_meta = {
+            "source": path.name,
+            "title": path.stem,
+            "doc_type": ext.lstrip("."),
+            "lang": lang,
+            "source_url": "",
+            "updated_at": int(path.stat().st_mtime),
+        }
+        docs = docs_from_markdown(text, base_meta) if ext == ".md" else docs_from_plain(text, base_meta)
+
+        kept = 0
+        for d in docs:
+            h = hashlib.sha256(d.page_content.encode("utf-8")).hexdigest()
+            if h in seen:
+                continue
+            seen.add(h)
+            documents.append(d)
+            kept += 1
+        print("  + " + path.name + ": " + str(kept) + " chunks (" + lang + ")")
+
+    return documents
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default="data")
-    ap.add_argument("--recreate", action="store_true")
+    ap.add_argument("--recreate", action="store_true",
+                    help="(kept for compatibility; collection is always rebuilt)")
     args = ap.parse_args()
 
     data_dir = Path(args.data)
     if not data_dir.exists():
-        print(f"[!] Data dir '{data_dir}' not found.", file=sys.stderr)
+        print("[!] Data dir '" + str(data_dir) + "' not found.", file=sys.stderr)
         sys.exit(1)
 
-    client = get_client()
-    ensure_collection(client, recreate=args.recreate)
-
-    files = list(iter_files(data_dir))
-    if not files:
-        print(f"[!] No supported files ({', '.join(SUPPORTED)}) in {data_dir}", file=sys.stderr)
+    documents = build_documents(data_dir)
+    if not documents:
+        print("[!] No documents to index.", file=sys.stderr)
         sys.exit(1)
 
-    print(f"[i] Found {len(files)} files. Collection: {settings.qdrant_collection}")
-    seen_hashes = set()
-    total_chunks = 0
-
-    for path in files:
-        # Detect destroyed-encoding files at the byte level (literal '?' bytes).
-        if path.suffix.lower() in (".txt", ".md", ".csv") and raw_corruption_ratio(path) >= 0.2:
-            print(f"  - SKIP (corrupted encoding, Cyrillic text lost): {path.name}")
-            continue
-        raw = load_file(path)
-        text = clean_text(raw)
-        if not text:
-            print(f"  - skip (empty): {path.name}")
-            continue
-        if _broken_ratio(text) >= 0.2:
-            print(f"  - SKIP (corrupted text): {path.name}")
-            continue
-        lang = guess_lang(text)
-        chunks = chunk_text(text)
-
-        points = []
-        for ch in chunks:
-            h = hashlib.sha256(ch.encode("utf-8")).hexdigest()
-            if h in seen_hashes:          # dedup identical chunks across files
-                continue
-            seen_hashes.add(h)
-            points.append((ch, h))
-
-        if not points:
-            continue
-
-        vectors = embed_texts([c for c, _ in points])
-        qpoints = []
-        for (ch, h), vec in zip(points, vectors):
-            qpoints.append(
-                qm.PointStruct(
-                    id=str(uuid.uuid5(uuid.NAMESPACE_URL, h)),
-                    vector=vec,
-                    payload={
-                        "text": ch,
-                        "title": path.stem,
-                        "source": path.name,
-                        "doc_type": path.suffix.lower().lstrip("."),
-                        "lang": lang,
-                        "updated_at": int(path.stat().st_mtime),
-                    },
-                )
-            )
-
-        # batch upsert
-        for i in range(0, len(qpoints), 64):
-            client.upsert(
-                collection_name=settings.qdrant_collection,
-                points=qpoints[i:i + 64],
-            )
-        total_chunks += len(qpoints)
-        print(f"  + {path.name}: {len(qpoints)} chunks ({lang})")
-
-    info = client.get_collection(settings.qdrant_collection)
-    print(f"[✓] Done. Upserted {total_chunks} chunks. Points in collection: {info.points_count}")
+    print("[i] Building hybrid collection '" + settings.qdrant_collection +
+          "' (dense=" + settings.embed_model + " + sparse=" + settings.sparse_model +
+          ") from " + str(len(documents)) + " chunks...")
+    build_collection(documents)
+    print("[OK] Done. Indexed " + str(len(documents)) + " chunks (hybrid dense+sparse).")
 
 
 if __name__ == "__main__":

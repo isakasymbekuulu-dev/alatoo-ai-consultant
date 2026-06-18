@@ -181,3 +181,19 @@ university-ai-consultant/
 4. Написать: «Продолжаем проект, читай CLAUDE.md» — я прочитаю контекст и начну с §9.
 
 > Плагины (Engineering, Twilio, Bright Data) уже установлены глобально и будут доступны в новом чате.
+
+## 8.3 Сделано (2026-06-18): RAG на LangChain + гибридный поиск ✅
+
+- Ingestion и retrieval переведены на **LangChain `QdrantVectorStore` (HYBRID)**:
+  named-векторы `dense` (BGE-M3) + `sparse` (BM25/FastEmbed), слияние RRF. Гибрид
+  чинит промахи dense-поиска на точных токенах (кабинеты, телефоны, баллы ОРТ).
+- Markdown чанкуется с учётом заголовков (`MarkdownHeaderTextSplitter`), путь
+  заголовков подмешан в текст; метаданные `source/doc_type/lang/section/faculty/
+  source_url` + payload-индексы (фильтрация по `lang` доступна в `retrieve(query, lang=)`).
+- Коллекция пересоздаётся при ingest; `score_threshold` к гибриду не применяется
+  (RRF-скоры, не cosine), `top_k` 5 → 6.
+- Затронуты: `app/{config,embeddings,qdrant_store,rag}.py`, `ingestion/ingest.py`,
+  `requirements.txt` (+`langchain-qdrant`, `fastembed`). Граф LangGraph не менялся.
+- Обоснование: `docs/adr/0003-langchain-hybrid-retrieval.md`.
+- TODO (фаза 2, при апгрейде RAM): cross-encoder reranker; заполнение `source_url`
+  при скрейпинге сайта; multi-query.

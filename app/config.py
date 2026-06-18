@@ -10,17 +10,22 @@ class Settings(BaseSettings):
     llm_model: str = "openai/gpt-4o-mini"
 
     # Embeddings. Local BGE-M3 by default (best ky/ru/en).
-    # For an API backend instead, set EMBED_MODEL=openai/text-embedding-3-small, EMBED_DIM=1536
+    # For an API backend: EMBED_MODEL=openai/text-embedding-3-small, EMBED_DIM=1536
     embed_model: str = "BAAI/bge-m3"
     embed_dim: int = 1024
 
-    # Qdrant
+    # Sparse embeddings for hybrid (lexical) retrieval — great for exact tokens
+    # (room numbers like "A315", phones, ОРТ scores). BM25 is tiny/CPU-cheap.
+    sparse_model: str = "Qdrant/bm25"
+
+    # Qdrant (hybrid collection uses named vectors: "dense" + "sparse")
     qdrant_url: str = "http://qdrant:6333"
     qdrant_api_key: str = ""
     qdrant_collection: str = "alatoo_kb"
 
-    # Retrieval / generation
-    top_k: int = 5
+    # Retrieval / generation. NOTE: hybrid fused score is RRF (~0.01-0.03),
+    # NOT cosine — so score_threshold is not applied to hybrid results.
+    top_k: int = 6
     score_threshold: float = 0.3
     max_context_chars: int = 8000
 

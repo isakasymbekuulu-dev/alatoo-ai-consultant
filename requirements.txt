@@ -5,19 +5,21 @@ pydantic==2.10.4
 pydantic-settings==2.7.1
 python-multipart==0.0.20
 
-# Vector DB
+# Vector DB + LangChain hybrid retrieval (dense BGE-M3 + sparse BM25)
 qdrant-client==1.12.2
+langchain-qdrant==0.2.1
+fastembed==0.8.0
 
 # LLM via GitHub Models (OpenAI-compatible) + API-embeddings option
 openai==1.59.6
 
-# Local embeddings (BGE-M3, multilingual ru/ky/en)
+# Local dense embeddings (BGE-M3, multilingual ru/ky/en)
 sentence-transformers==3.3.1
 
 # Ingestion: file parsing + chunking + text cleanup
 pypdf==5.1.0
 python-docx==1.1.2
-langchain-text-splitters==0.3.4
+langchain-text-splitters==0.3.11
 ftfy==6.3.1
 charset-normalizer==3.4.1
 

@@ -55,3 +55,19 @@ jobs:
             fi
 
             docker compose ps
+
+  # Регрессионный eval после деплоя. Бежит на раннере GitHub (он достаёт прод),
+  # отдельная job — НЕ блокирует деплой (тот уже применён в job `deploy`).
+  # Краснеет, если качество ответов просело ниже порога — регрессия видна сразу.
+  eval:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Warm up backend (model load on first query)
+        run: sleep 25
+      - name: Run regression eval against production
+        run: python eval/qa_eval.py --base https://chat.alatoogpt.xyz --threshold 0.9

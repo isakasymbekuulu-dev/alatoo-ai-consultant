@@ -4,14 +4,8 @@ name: Deploy to droplet
 # Заходит на сервер по SSH, подтягивает свежий код, пересобирает контейнеры
 # и переиндексирует базу знаний в Qdrant — только если менялись data/ или ingestion/.
 #
-# Нужно один раз добавить секреты в репозитории:
-#   Settings → Secrets and variables → Actions → New repository secret
-#     DEPLOY_HOST      — IP или домен дроплета (напр. 203.0.113.10)
-#     DEPLOY_USER      — пользователь SSH (напр. root или deploy)
-#     DEPLOY_SSH_KEY   — приватный SSH-ключ целиком (BEGIN ... END), у которого
-#                        публичная часть лежит в ~/.ssh/authorized_keys на сервере
-#     DEPLOY_PATH      — путь к репозиторию на сервере (напр. /opt/alatoo-ai-consultant)
-#     DEPLOY_PORT      — (необязательно) SSH-порт, по умолчанию 22
+# Секреты (Settings → Secrets and variables → Actions):
+#   DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY, DEPLOY_PATH, (опц.) DEPLOY_PORT
 
 on:
   push:
@@ -43,10 +37,8 @@ jobs:
             git reset --hard origin/main
             NEW=$(git rev-parse HEAD)
 
-            # пересобрать и поднять backend (+ qdrant, openwebui)
             docker compose up -d --build
 
-            # переиндексировать только при изменениях в данных или пайплайне ingestion
             if [ "$OLD" = "$NEW" ] || ! git diff --quiet "$OLD" "$NEW" -- data ingestion; then
               echo ">> data/ или ingestion/ изменились — переиндексация Qdrant"
               docker compose run --rm backend python -m ingestion.ingest --recreate
@@ -54,11 +46,20 @@ jobs:
               echo ">> изменений в данных нет — переиндексация пропущена"
             fi
 
+            # Прогрев: первый запрос грузит dense+sparse+reranker (и качает модели),
+            # чтобы пользователи и eval-job не ловили холодный старт. -m 600 — на случай
+            # первой загрузки модели реранкера.
+            echo ">> warmup (load dense+sparse+reranker models)"
+            sleep 3
+            curl -s -m 600 -o /dev/null -w "warmup HTTP %{http_code}\n" \
+              http://localhost:8000/v1/chat/completions \
+              -H 'Content-Type: application/json' \
+              -d '{"model":"alatoo-rag","stream":false,"messages":[{"role":"user","content":"тест"}]}' || true
+
             docker compose ps
 
   # Регрессионный eval после деплоя. Бежит на раннере GitHub (он достаёт прод),
-  # отдельная job — НЕ блокирует деплой (тот уже применён в job `deploy`).
-  # Краснеет, если качество ответов просело ниже порога — регрессия видна сразу.
+  # отдельная job — НЕ блокирует деплой. Краснеет при просадке качества.
   eval:
     needs: deploy
     runs-on: ubuntu-latest
@@ -67,7 +68,5 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Warm up backend (model load on first query)
-        run: sleep 25
       - name: Run regression eval against production
         run: python eval/qa_eval.py --base https://chat.alatoogpt.xyz --threshold 0.9

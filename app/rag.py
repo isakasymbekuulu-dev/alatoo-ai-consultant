@@ -1,4 +1,4 @@
-"""RAG core: retrieve context from Qdrant (hybrid) and build the prompt."""
+"""RAG core: retrieve context from Qdrant (hybrid + rerank) and build the prompt."""
 from typing import Dict, List, Optional, Tuple
 
 from app.config import settings
@@ -31,10 +31,9 @@ SYSTEM_PROMPT = """Ты — официальный AI-консультант А�
 
 
 def retrieve(query: str, lang: Optional[str] = None) -> List[dict]:
-    """Hybrid (dense BGE-M3 + sparse BM25) retrieval via QdrantVectorStore.
-
-    Scores are RRF-fused (not cosine), so we rank by top_k and do not apply a
-    cosine score_threshold. Optional ``lang`` filters by metadata.lang.
+    """Hybrid (dense BGE-M3 + sparse BM25) retrieval, then optional cross-encoder
+    rerank for precision. Hybrid scores are RRF-fused (not cosine), so no cosine
+    threshold is applied. Optional ``lang`` filters by metadata.lang.
     """
     vs = get_vector_store()
     flt = None
@@ -43,7 +42,8 @@ def retrieve(query: str, lang: Optional[str] = None) -> List[dict]:
         flt = qm.Filter(must=[qm.FieldCondition(
             key="metadata.lang", match=qm.MatchValue(value=lang))])
 
-    hits = vs.similarity_search_with_score(query, k=settings.top_k, filter=flt)
+    fetch_k = settings.rerank_fetch_k if settings.rerank_enabled else settings.top_k
+    hits = vs.similarity_search_with_score(query, k=fetch_k, filter=flt)
     results = []
     for doc, score in hits:
         md = doc.metadata or {}
@@ -58,6 +58,15 @@ def retrieve(query: str, lang: Optional[str] = None) -> List[dict]:
                 "program": md.get("program", ""),
             }
         )
+
+    if settings.rerank_enabled and results:
+        try:
+            from app.rerank import rerank
+            results = rerank(query, results, settings.top_k)
+        except Exception:
+            results = results[:settings.top_k]  # graceful fallback to hybrid order
+    else:
+        results = results[:settings.top_k]
     return results
 
 

@@ -197,3 +197,15 @@ university-ai-consultant/
 - Обоснование: `docs/adr/0003-langchain-hybrid-retrieval.md`.
 - TODO (фаза 2, при апгрейде RAM): cross-encoder reranker; заполнение `source_url`
   при скрейпинге сайта; multi-query.
+
+## 8.4 Сделано (2026-06-18): cross-encoder реранкер ✅
+
+- Добавлен реранкинг (`app/rerank.py`) поверх гибрида: гибрид достаёт `rerank_fetch_k=12`
+  кандидатов, cross-encoder пере-ранжирует и оставляет `top_k=6`. Модель —
+  `jinaai/jina-reranker-v2-base-multilingual` через **FastEmbed (ONNX)**: многоязычная,
+  лёгкая (~278M) — подходит для 1 vCPU. Новых зависимостей нет (реранк входит в fastembed).
+- Сервер: дроплет 8 ГБ RAM / 1 vCPU ($48/мес). RAM хватает с запасом → апгрейд/доплата
+  не нужны; узкое место — CPU, поэтому взята лёгкая модель и малый набор кандидатов.
+- Включается флагом `RERANK_ENABLED` (по умолч. on); при ошибке реранка — мягкий
+  фолбэк на гибридный порядок. Деплой прогревает модели curl'ом перед eval.
+- TODO: при росте нагрузки/желании bge-reranker-v2-m3 — добавить vCPU.

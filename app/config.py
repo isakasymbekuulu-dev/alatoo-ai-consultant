@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     # (room numbers like "A315", phones, ОРТ scores). BM25 is tiny/CPU-cheap.
     sparse_model: str = "Qdrant/bm25"
 
+    # Cross-encoder reranking (FastEmbed, ONNX). Re-scores the top candidates for
+    # precision. Light multilingual model to stay fast on 1 vCPU.
+    rerank_enabled: bool = True
+    rerank_model: str = "jinaai/jina-reranker-v2-base-multilingual"
+    rerank_fetch_k: int = 12   # candidates pulled from hybrid before reranking
+
     # Qdrant (hybrid collection uses named vectors: "dense" + "sparse")
     qdrant_url: str = "http://qdrant:6333"
     qdrant_api_key: str = ""

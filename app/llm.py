@@ -1,9 +1,11 @@
-"""LLM client with automatic provider failover (OpenAI-compatible + Azure).
+"""LLM client with robust automatic provider failover (OpenAI-compatible + Azure).
 
-Tries providers in order and falls through on quota / rate-limit / server errors,
-so the bot stays up when one provider is exhausted. Default order:
-  Azure OpenAI (no hard limit)  ->  generic/primary (e.g. Gemini)  ->  GitHub Models
-Each provider is enabled only when its credentials are configured.
+Tries providers in order; falls through on quota / rate-limit / server errors.
+Default order: Azure OpenAI -> primary (e.g. Groq) -> explicit fallback (e.g.
+OpenAI) -> GitHub Models. Streaming is hardened so a provider failure never
+breaks the SSE stream (which surfaced as client 'payload is not completed' /
+TransferEncodingError): we only switch providers before any token is emitted,
+and on total failure we emit a short message instead of raising mid-stream.
 """
 import logging
 from functools import lru_cache
@@ -17,6 +19,9 @@ log = logging.getLogger("alatoo.llm")
 
 # (name, base_url, api_key, model, api_version)  api_version != "" => Azure
 Provider = Tuple[str, str, str, str, str]
+
+_FAIL_MSG = ("Извините, сервис ИИ временно недоступен. Пожалуйста, попробуйте чуть позже "
+             "или обратитесь в приёмную комиссию.")
 
 
 def _providers() -> List[Provider]:
@@ -62,21 +67,28 @@ def chat(messages: List[Dict[str, str]], temperature: float = 0.2) -> str:
         except Exception as e:  # noqa: BLE001 — fail over on any provider error
             last_err = e
             log.warning("LLM provider '%s' failed: %s — trying next", name, str(e)[:200])
-    raise last_err
+    log.error("All LLM providers failed: %s", last_err)
+    return _FAIL_MSG
 
 
 def chat_stream(messages: List[Dict[str, str]], temperature: float = 0.2) -> Iterator[str]:
     last_err = None
     for name, base, key, model, ver in _providers():
+        produced = False
         try:
             stream = _client(base, key, ver).chat.completions.create(
                 model=model, messages=messages, temperature=temperature, stream=True)
             for chunk in stream:
                 if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
+                    produced = True
                     yield chunk.choices[0].delta.content
-            return
-        except Exception as e:  # noqa: BLE001 — quota/429 occur before any token
+            return  # finished cleanly
+        except Exception as e:  # noqa: BLE001
             last_err = e
-            log.warning("LLM stream provider '%s' failed: %s — trying next", name, str(e)[:200])
-            continue
-    raise last_err
+            log.warning("LLM stream provider '%s' failed: %s", name, str(e)[:200])
+            if produced:
+                # Already streamed partial output — switching would garble it; stop cleanly.
+                return
+            continue  # nothing emitted yet — try the next provider
+    log.error("All LLM stream providers failed: %s", last_err)
+    yield _FAIL_MSG  # graceful message instead of breaking the SSE stream

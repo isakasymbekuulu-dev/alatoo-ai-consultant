@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     # precision. Light multilingual model to stay fast on 1 vCPU.
     rerank_enabled: bool = True
     rerank_model: str = "jinaai/jina-reranker-v2-base-multilingual"
-    rerank_fetch_k: int = 12   # candidates pulled from hybrid before reranking
+    rerank_fetch_k: int = 10   # candidates from hybrid before reranking
 
     # Qdrant (hybrid collection uses named vectors: "dense" + "sparse")
     qdrant_url: str = "http://qdrant:6333"

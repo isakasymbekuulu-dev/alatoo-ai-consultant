@@ -22,7 +22,7 @@ def rerank(query: str, chunks: List[dict], top_n: int) -> List[dict]:
     if not chunks:
         return chunks
     ce = get_reranker()
-    scores = list(ce.rerank(query, [c.get("text", "") for c in chunks]))
+    scores = list(ce.rerank(query, [c.get("text", "")[:512] for c in chunks]))
     order = sorted(range(len(chunks)), key=lambda i: scores[i], reverse=True)
     out = []
     for i in order[:top_n]:

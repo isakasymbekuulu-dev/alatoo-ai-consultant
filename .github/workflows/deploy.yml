@@ -25,6 +25,7 @@ jobs:
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.2.0
         env:
+          GROQ_KEY: ${{ secrets.GROQ_API_KEY }}
           GEMINI_KEY: ${{ secrets.Gemini_API_Key }}
           AZ_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
           AZ_KEY: ${{ secrets.AZURE_OPENAI_KEY }}
@@ -35,7 +36,7 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
           command_timeout: 30m
-          envs: GEMINI_KEY,AZ_ENDPOINT,AZ_KEY,AZ_DEPLOY
+          envs: GROQ_KEY,GEMINI_KEY,AZ_ENDPOINT,AZ_KEY,AZ_DEPLOY
           script: |
             set -euo pipefail
             cd "${{ secrets.DEPLOY_PATH }}"
@@ -48,7 +49,12 @@ jobs:
             # --- configure LLM providers in .env (managed block) ---
             ENVF=.env; touch "$ENVF"
             sed -i '/^LLM_BASE_URL=/d;/^LLM_MODEL=/d;/^LLM_API_KEY=/d;/^LLM_AZURE_ENDPOINT=/d;/^LLM_AZURE_API_KEY=/d;/^LLM_AZURE_DEPLOYMENT=/d' "$ENVF"
-            if [ -n "${GEMINI_KEY:-}" ]; then
+            if [ -n "${GROQ_KEY:-}" ]; then
+              { echo "LLM_BASE_URL=https://api.groq.com/openai/v1";
+                echo "LLM_MODEL=llama-3.3-70b-versatile";
+                echo "LLM_API_KEY=${GROQ_KEY}"; } >> "$ENVF"
+              echo ">> Groq configured as primary"
+            elif [ -n "${GEMINI_KEY:-}" ]; then
               { echo "LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/";
                 echo "LLM_MODEL=gemini-2.0-flash";
                 echo "LLM_API_KEY=${GEMINI_KEY}"; } >> "$ENVF"

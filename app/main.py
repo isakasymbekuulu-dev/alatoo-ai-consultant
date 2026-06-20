@@ -141,7 +141,9 @@ async def chat_completions(
         riasec_summary = riasec.summary_for_llm(result, name=stored.get("name"))
 
     history = [{"role": m.role, "content": m.content} for m in req.messages]
+    _t_retr = time.time()
     messages, chunks, intent, trace = run_graph(history, riasec_summary=riasec_summary)
+    retrieve_ms = int((time.time() - _t_retr) * 1000)
     user_turns = [m for m in history if m.get("role") == "user"]
     last_user = user_turns[-1]["content"] if user_turns else ""
 
@@ -173,7 +175,8 @@ async def chat_completions(
             yield "data: [DONE]\n\n"
             logging_store.log_turn(session_id, source, last_user, "".join(acc), sources, consent)
 
-        return StreamingResponse(gen(), media_type="text/event-stream")
+        return StreamingResponse(gen(), media_type="text/event-stream",
+                                 headers={"X-Retrieve-Ms": str(retrieve_ms)})
 
     answer = chat(messages, temperature=req.temperature)
     logging_store.log_turn(session_id, source, last_user, answer, sources, consent)
@@ -182,7 +185,7 @@ async def chat_completions(
         "choices": [{"index": 0, "message": {"role": "assistant", "content": answer},
                      "finish_reason": "stop"}],
         "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
-    })
+    }, headers={"X-Retrieve-Ms": str(retrieve_ms)})
 
 
 @app.get("/test")

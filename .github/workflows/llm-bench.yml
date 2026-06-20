@@ -1,0 +1,28 @@
+name: LLM benchmark
+
+# Ручной запуск (Actions → LLM benchmark → Run workflow). Сравнивает скорость и
+# качество LLM-провайдеров на одинаковых RAG-вопросах ru/ky. Бежит на раннере
+# GitHub (есть интернет ко всем провайдерам). Провайдеры без ключа пропускаются.
+#
+# Добавьте нужные секреты (Settings → Secrets → Actions):
+#   GROQ_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, (опц.) GH_MODELS_TOKEN
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install "openai==1.59.6"
+      - name: Run LLM benchmark
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_MODELS_TOKEN }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: python eval/llm_bench.py

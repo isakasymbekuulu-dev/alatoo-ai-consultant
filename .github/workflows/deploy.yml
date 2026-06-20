@@ -1,11 +1,13 @@
 name: Deploy to droplet
 
-# Авто-деплой при пуше в main (или вручную через "Run workflow").
-# Заходит на сервер по SSH, подтягивает свежий код, пересобирает контейнеры
-# и переиндексирует базу знаний в Qdrant — только если менялись data/ или ingestion/.
+# Авто-деплой при пуше в main (или вручную). По SSH: git reset, пересборка,
+# подстановка LLM-провайдеров в .env из секретов, переиндексация (если менялись
+# data/ingestion), прогрев. Затем отдельная job eval (не блокирует деплой).
 #
-# Секреты (Settings → Secrets and variables → Actions):
-#   DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY, DEPLOY_PATH, (опц.) DEPLOY_PORT
+# Секреты деплоя: DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY, DEPLOY_PATH, (опц.) DEPLOY_PORT
+# Секреты LLM: Gemini_API_Key (основной сейчас); для Azure (без лимита, станет
+#   главным): AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_KEY, AZURE_OPENAI_DEPLOYMENT
+#   Failover: Azure -> Gemini -> GitHub Models (github_token уже в .env).
 
 on:
   push:
@@ -22,12 +24,18 @@ jobs:
     steps:
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          GEMINI_KEY: ${{ secrets.Gemini_API_Key }}
+          AZ_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZ_KEY: ${{ secrets.AZURE_OPENAI_KEY }}
+          AZ_DEPLOY: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
           command_timeout: 30m
+          envs: GEMINI_KEY,AZ_ENDPOINT,AZ_KEY,AZ_DEPLOY
           script: |
             set -euo pipefail
             cd "${{ secrets.DEPLOY_PATH }}"
@@ -37,7 +45,24 @@ jobs:
             git reset --hard origin/main
             NEW=$(git rev-parse HEAD)
 
-            docker compose up -d --build
+            # --- configure LLM providers in .env (managed block) ---
+            ENVF=.env; touch "$ENVF"
+            sed -i '/^LLM_BASE_URL=/d;/^LLM_MODEL=/d;/^LLM_API_KEY=/d;/^LLM_AZURE_ENDPOINT=/d;/^LLM_AZURE_API_KEY=/d;/^LLM_AZURE_DEPLOYMENT=/d' "$ENVF"
+            if [ -n "${GEMINI_KEY:-}" ]; then
+              { echo "LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/";
+                echo "LLM_MODEL=gemini-2.0-flash";
+                echo "LLM_API_KEY=${GEMINI_KEY}"; } >> "$ENVF"
+              echo ">> Gemini configured as primary"
+            fi
+            if [ -n "${AZ_ENDPOINT:-}" ] && [ -n "${AZ_KEY:-}" ] && [ -n "${AZ_DEPLOY:-}" ]; then
+              { echo "LLM_AZURE_ENDPOINT=${AZ_ENDPOINT}";
+                echo "LLM_AZURE_API_KEY=${AZ_KEY}";
+                echo "LLM_AZURE_DEPLOYMENT=${AZ_DEPLOY}"; } >> "$ENVF"
+              echo ">> Azure OpenAI configured as TOP primary"
+            fi
+
+            docker compose up -d --build --force-recreate backend
+            docker compose up -d qdrant openwebui
 
             if [ "$OLD" = "$NEW" ] || ! git diff --quiet "$OLD" "$NEW" -- data ingestion; then
               echo ">> data/ или ingestion/ изменились — переиндексация Qdrant"
@@ -46,10 +71,7 @@ jobs:
               echo ">> изменений в данных нет — переиндексация пропущена"
             fi
 
-            # Прогрев: первый запрос грузит dense+sparse+reranker (и качает модели),
-            # чтобы пользователи и eval-job не ловили холодный старт. -m 600 — на случай
-            # первой загрузки модели реранкера.
-            echo ">> warmup (load dense+sparse+reranker models)"
+            echo ">> warmup"
             sleep 3
             curl -s -m 600 -o /dev/null -w "warmup HTTP %{http_code}\n" \
               http://localhost:8000/v1/chat/completions \
@@ -58,8 +80,6 @@ jobs:
 
             docker compose ps
 
-  # Регрессионный eval после деплоя. Бежит на раннере GitHub (он достаёт прод),
-  # отдельная job — НЕ блокирует деплой. Краснеет при просадке качества.
   eval:
     needs: deploy
     runs-on: ubuntu-latest

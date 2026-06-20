@@ -5,6 +5,7 @@ top candidates jointly against the query for higher precision. Model:
 jina-reranker-v2-base-multilingual (~278M, ru/en + many langs) — light enough for
 the 1-vCPU droplet when applied to a small candidate set. Lazily loaded/cached.
 """
+import os
 from functools import lru_cache
 from typing import List
 
@@ -14,7 +15,7 @@ from app.config import settings
 @lru_cache(maxsize=1)
 def get_reranker():
     from fastembed.rerank.cross_encoder import TextCrossEncoder
-    return TextCrossEncoder(model_name=settings.rerank_model)
+    return TextCrossEncoder(model_name=settings.rerank_model, threads=os.cpu_count() or 4)
 
 
 def rerank(query: str, chunks: List[dict], top_n: int) -> List[dict]:

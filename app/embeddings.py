@@ -5,6 +5,7 @@ multilingual ru/ky/en) or an API model (EMBED_MODEL=openai/...). Sparse
 (lexical): BM25 via FastEmbed — cheap, great for exact tokens (room numbers
 like "A315", phones, ОРТ scores). Same objects at index- and query-time.
 """
+import os
 from functools import lru_cache
 from typing import List
 
@@ -25,6 +26,11 @@ class _LocalDense(Embeddings):
 
     @lru_cache(maxsize=1)
     def _model(self):
+        try:
+            import torch
+            torch.set_num_threads(os.cpu_count() or 4)
+        except Exception:
+            pass
         from sentence_transformers import SentenceTransformer
         return SentenceTransformer(settings.embed_model)
 
@@ -65,4 +71,4 @@ def get_dense_embeddings() -> Embeddings:
 def get_sparse_embeddings():
     """BM25 sparse embeddings (FastEmbed). Lazily loaded/cached."""
     from langchain_qdrant import FastEmbedSparse
-    return FastEmbedSparse(model_name=settings.sparse_model)
+    return FastEmbedSparse(model_name=settings.sparse_model, threads=os.cpu_count() or 4)

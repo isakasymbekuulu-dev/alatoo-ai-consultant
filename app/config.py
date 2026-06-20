@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     # Cross-encoder reranking (FastEmbed, ONNX). Re-scores the top candidates for
     # precision. Light multilingual model to stay fast on 1 vCPU.
-    rerank_enabled: bool = True
+    rerank_enabled: bool = False  # off by default: cross-encoder is too slow on CPU for live chat (set RERANK_ENABLED=true to re-enable)
     rerank_model: str = "jinaai/jina-reranker-v2-base-multilingual"
     rerank_fetch_k: int = 10   # candidates from hybrid before reranking
 

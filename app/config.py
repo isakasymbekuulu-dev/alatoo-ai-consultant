@@ -9,6 +9,13 @@ class Settings(BaseSettings):
     github_models_base_url: str = "https://models.github.ai/inference"
     llm_model: str = "openai/gpt-4o-mini"
 
+    # Generic OpenAI-compatible LLM override — set to switch provider
+    # (Gemini/Groq/Azure/OpenAI). If empty, falls back to GitHub Models above.
+    # e.g. LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+    #      LLM_API_KEY=...   LLM_MODEL=gemini-2.0-flash
+    llm_base_url: str = ""
+    llm_api_key: str = ""
+
     # Embeddings. Local BGE-M3 by default (best ky/ru/en).
     # For an API backend: EMBED_MODEL=openai/text-embedding-3-small, EMBED_DIM=1536
     embed_model: str = "BAAI/bge-m3"

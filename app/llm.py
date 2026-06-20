@@ -10,8 +10,8 @@ from app.config import settings
 @lru_cache(maxsize=1)
 def get_llm() -> OpenAI:
     return OpenAI(
-        base_url=settings.github_models_base_url,
-        api_key=settings.github_token,
+        base_url=settings.llm_base_url or settings.github_models_base_url,
+        api_key=settings.llm_api_key or settings.github_token,
     )
 
 

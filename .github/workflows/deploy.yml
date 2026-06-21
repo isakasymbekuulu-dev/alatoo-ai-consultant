@@ -50,22 +50,30 @@ jobs:
             # --- configure LLM providers in .env (managed block) ---
             ENVF=.env; touch "$ENVF"
             sed -i '/^LLM_BASE_URL=/d;/^LLM_MODEL=/d;/^LLM_API_KEY=/d;/^LLM_FALLBACK_BASE_URL=/d;/^LLM_FALLBACK_MODEL=/d;/^LLM_FALLBACK_API_KEY=/d;/^LLM_AZURE_ENDPOINT=/d;/^LLM_AZURE_API_KEY=/d;/^LLM_AZURE_DEPLOYMENT=/d' "$ENVF"
-            if [ -n "${GROQ_KEY:-}" ]; then
+            PRIMARY=""
+            # Primary: OpenAI (best ru/ky grounding) > Groq > Gemini
+            if [ -n "${OPENAI_KEY:-}" ]; then
+              { echo "LLM_BASE_URL=https://api.openai.com/v1";
+                echo "LLM_MODEL=gpt-4o-mini";
+                echo "LLM_API_KEY=${OPENAI_KEY}"; } >> "$ENVF"
+              echo ">> OpenAI configured as primary"; PRIMARY=openai
+            elif [ -n "${GROQ_KEY:-}" ]; then
               { echo "LLM_BASE_URL=https://api.groq.com/openai/v1";
                 echo "LLM_MODEL=llama-3.3-70b-versatile";
                 echo "LLM_API_KEY=${GROQ_KEY}"; } >> "$ENVF"
-              echo ">> Groq configured as primary"
+              echo ">> Groq configured as primary"; PRIMARY=groq
             elif [ -n "${GEMINI_KEY:-}" ]; then
               { echo "LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/";
                 echo "LLM_MODEL=gemini-2.0-flash";
                 echo "LLM_API_KEY=${GEMINI_KEY}"; } >> "$ENVF"
-              echo ">> Gemini configured as primary"
+              echo ">> Gemini configured as primary"; PRIMARY=gemini
             fi
-            if [ -n "${OPENAI_KEY:-}" ]; then
-              { echo "LLM_FALLBACK_BASE_URL=https://api.openai.com/v1";
-                echo "LLM_FALLBACK_MODEL=gpt-4o-mini";
-                echo "LLM_FALLBACK_API_KEY=${OPENAI_KEY}"; } >> "$ENVF"
-              echo ">> OpenAI configured as fallback"
+            # Fallback: Groq (unless it is already the primary)
+            if [ -n "${GROQ_KEY:-}" ] && [ "$PRIMARY" != "groq" ]; then
+              { echo "LLM_FALLBACK_BASE_URL=https://api.groq.com/openai/v1";
+                echo "LLM_FALLBACK_MODEL=llama-3.3-70b-versatile";
+                echo "LLM_FALLBACK_API_KEY=${GROQ_KEY}"; } >> "$ENVF"
+              echo ">> Groq configured as fallback"
             fi
             if [ -n "${AZ_ENDPOINT:-}" ] && [ -n "${AZ_KEY:-}" ] && [ -n "${AZ_DEPLOY:-}" ]; then
               { echo "LLM_AZURE_ENDPOINT=${AZ_ENDPOINT}";

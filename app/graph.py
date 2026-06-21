@@ -17,6 +17,7 @@ import re
 from langgraph.graph import StateGraph, START, END
 
 from app.rag import build_messages, SYSTEM_PROMPT
+from app.lang import answer_directive, detect_lang
 
 _GREETING = re.compile(
     r"^(привет|здравствуй|здрасьте|салам|саламатсыз|ассалам|hello|hi|hey|"
@@ -88,6 +89,9 @@ def general_node(state: GState) -> GState:
             "content": f"РЕЗУЛЬТАТЫ ТЕСТА RIASEC этого пользователя:\n\n{state['riasec_summary']}",
         })
     messages.extend(convo)
+    # Reply in the user's language even for greetings/smalltalk.
+    messages.append({"role": "system",
+                     "content": answer_directive(detect_lang(_last_user(state.get("history"))))})
     state["messages"] = messages
     state["chunks"] = []
     state.setdefault("trace", []).append("general: без поиска по базе")

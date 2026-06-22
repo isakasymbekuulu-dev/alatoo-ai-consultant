@@ -1,19 +1,22 @@
 <#
   Pull AlaToo server backups from the droplet to THIS Windows computer.
   Uses Windows' built-in ssh/scp (OpenSSH). Copies any server archives that
-  aren't already present locally into <project>\backups\server\, and prunes to $Keep.
+  aren't already present locally into $LocalDir, and prunes to $Keep.
 
   Prereq: passwordless SSH to the droplet (run scripts\setup_pull_ssh.ps1 first).
 
-  Install the DAILY auto-pull:
-      powershell -ExecutionPolicy Bypass -File scripts\pull_server_backups.ps1 -Install
+  Install the DAILY auto-pull to a custom folder (e.g. on D:):
+      powershell -ExecutionPolicy Bypass -File scripts\pull_server_backups.ps1 -LocalDir "D:\Backups\AlaToo\server" -Install
   Run a pull right now:
-      powershell -ExecutionPolicy Bypass -File scripts\pull_server_backups.ps1
+      powershell -ExecutionPolicy Bypass -File scripts\pull_server_backups.ps1 -LocalDir "D:\Backups\AlaToo\server"
+
+  If -LocalDir is omitted it defaults to <project>\backups\server.
 #>
 param(
   [string]$DropletHost = "167.172.176.33",
   [string]$User        = "root",
   [string]$RemoteDir   = "/opt/alatoo-ai-consultant/backups/server",
+  [string]$LocalDir    = "",
   [int]$Keep           = 7,
   [int]$Port           = 22,
   [string]$At          = "10:00am",
@@ -23,24 +26,26 @@ param(
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Root      = Split-Path -Parent $ScriptDir
-$LocalDir  = Join-Path $Root "backups\server"
+if (-not $LocalDir) { $LocalDir = Join-Path $Root "backups\server" }
 
 if ($Install) {
   $ps1 = $MyInvocation.MyCommand.Path
-  $action   = New-ScheduledTaskAction -Execute "powershell.exe" `
-              -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$ps1`""
+  $arg = "-NoProfile -ExecutionPolicy Bypass -File `"$ps1`" -LocalDir `"$LocalDir`""
+  $action   = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $arg
   $trigger  = New-ScheduledTaskTrigger -Daily -At $At
   $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -RunOnlyIfNetworkAvailable
   Register-ScheduledTask -TaskName "AlaToo pull server backups" -Action $action `
     -Trigger $trigger -Settings $settings -Description "Daily copy of droplet backups to this PC" -Force | Out-Null
   Write-Host "[install] Scheduled task 'AlaToo pull server backups' registered (daily at $At)."
-  Write-Host "[install] Runs as your user when you're logged in; make sure 'ssh $User@$DropletHost echo OK' works without a prompt."
+  Write-Host "[install] Destination: $LocalDir"
+  Write-Host "[install] Runs as your user when logged in; ensure 'ssh $User@$DropletHost echo OK' works without a prompt."
   return
 }
 
 New-Item -ItemType Directory -Force -Path $LocalDir | Out-Null
 $sshTarget = "$User@$DropletHost"
 
+Write-Host "[pull] destination: $LocalDir"
 Write-Host "[pull] listing remote archives on $sshTarget ..."
 $remoteList = & ssh -p $Port -o BatchMode=yes -o StrictHostKeyChecking=accept-new $sshTarget `
               "ls -1t $RemoteDir/alatoo-server-*.tar.gz 2>/dev/null"

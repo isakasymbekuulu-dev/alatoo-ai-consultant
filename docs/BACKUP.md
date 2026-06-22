@@ -83,9 +83,9 @@ crontab -e
 3. Проверить: `ssh root@167.172.176.33 echo OK` → должно вывести `OK` без пароля.
 4. Включить ежедневное автостягивание:
    ```powershell
-   powershell -ExecutionPolicy Bypass -File scripts\pull_server_backups.ps1 -Install
+   powershell -ExecutionPolicy Bypass -File scripts\pull_server_backups.ps1 -LocalDir "D:\Backups\AlaToo\server" -Install
    ```
-   Задача «AlaToo pull server backups» будет каждый день в 10:00 копировать новые архивы в `backups\server\`, хранит 7. Работает, когда комп включён и ты в системе.
+   Задача «AlaToo pull server backups» будет каждый день в 10:00 копировать новые архивы в `D:\Backups\AlaToo\server\`, хранит 7. (Без `-LocalDir` путь по умолчанию — `backups\server\` в папке проекта.) Работает, когда комп включён и ты в системе.
 
 Скрипты Windows: `scripts/setup_pull_ssh.ps1`, `scripts/pull_server_backups.ps1` (использует встроенный `scp`).
 Вариант для Linux/Mac/WSL остаётся в `scripts/pull_server_backups.sh`.

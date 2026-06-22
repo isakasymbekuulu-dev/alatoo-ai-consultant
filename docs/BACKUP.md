@@ -72,7 +72,23 @@ crontab -e
 # каждый день в 03:00 по серверному времени:
 0 3 * * * cd /opt/alatoo-ai-consultant && KEEP=7 bash scripts/backup_server.sh >> /var/log/alatoo-backup.log 2>&1
 ```
-Раз в неделю стягивать архивы домой `pull_server_backups.sh` (или добавить в cron на ноуте).
+### На твой Windows-комп (каждый день) — Планировщик заданий Windows
+Серверные архивы лежат только на дроплете, пока не стянуты. Настройка автостягивания (делается один раз):
+
+1. Настроить SSH-ключ (генерит ключ + ssh config, печатает публичный ключ и команду для сервера):
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File scripts\setup_pull_ssh.ps1
+   ```
+2. Вставить показанную одну строку в **web-консоль дроплета** (она добавляет твой публичный ключ в `~/.ssh/authorized_keys`). Это единственный шаг, который делаешь сам — он даёт доступ на вход.
+3. Проверить: `ssh root@167.172.176.33 echo OK` → должно вывести `OK` без пароля.
+4. Включить ежедневное автостягивание:
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File scripts\pull_server_backups.ps1 -Install
+   ```
+   Задача «AlaToo pull server backups» будет каждый день в 10:00 копировать новые архивы в `backups\server\`, хранит 7. Работает, когда комп включён и ты в системе.
+
+Скрипты Windows: `scripts/setup_pull_ssh.ps1`, `scripts/pull_server_backups.ps1` (использует встроенный `scp`).
+Вариант для Linux/Mac/WSL остаётся в `scripts/pull_server_backups.sh`.
 
 ---
 

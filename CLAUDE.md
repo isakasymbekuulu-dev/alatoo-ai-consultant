@@ -37,7 +37,7 @@
   `Опросник_приёмная_комиссия_соцбот.docx` (Instagram Direct / WhatsApp / Telegram) — ждём ответы,
   затем системный промпт соц-бота (см. §13).
 
-- **Бэкапы (2026-06-22):** `scripts/backup_local.sh` (полный архив папки → `backups/local/`, храним 10), `scripts/backup_server.sh` (SQLite+Qdrant+OpenWebUI+.env на дроплете → `backups/server/`), `restore_server.sh`, `pull_server_backups.sh`. Авто: weekly scheduled task (локально+push) + **cron на дроплете УСТАНОВЛЕН** (03:00 UTC, KEEP=7; см. `docs/BACKUP.md`). `backups/` в .gitignore.
+- **Бэкапы (2026-06-22):** `scripts/backup_local.sh` (полный архив папки → `backups/local/`, храним 10), `scripts/backup_server.sh` (SQLite+Qdrant+OpenWebUI+.env на дроплете → `backups/server/`), `restore_server.sh`, `pull_server_backups.sh` (+ Windows `setup_pull_ssh.ps1` / `pull_server_backups.ps1` для ежедневного стягивания архивов на комп Isa). Авто: weekly scheduled task (локально+push) + **cron на дроплете УСТАНОВЛЕН** (03:00 UTC, KEEP=7; см. `docs/BACKUP.md`). `backups/` в .gitignore.
 
 **Реальная структура кода (НЕ та, что в §9 — та была первоначальным планом):**
 ```

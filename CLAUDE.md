@@ -37,7 +37,7 @@
   `Опросник_приёмная_комиссия_соцбот.docx` (Instagram Direct / WhatsApp / Telegram) — ждём ответы,
   затем системный промпт соц-бота (см. §13).
 
-- **Бэкапы (2026-06-22):** `scripts/backup_local.sh` (полный архив папки → `backups/local/`, храним 10), `scripts/backup_server.sh` (SQLite+Qdrant+OpenWebUI+.env на дроплете → `backups/server/`), `restore_server.sh`, `pull_server_backups.sh`. Авто: weekly scheduled task (локально+push) + cron на дроплете (см. `docs/BACKUP.md`). `backups/` в .gitignore.
+- **Бэкапы (2026-06-22):** `scripts/backup_local.sh` (полный архив папки → `backups/local/`, храним 10), `scripts/backup_server.sh` (SQLite+Qdrant+OpenWebUI+.env на дроплете → `backups/server/`), `restore_server.sh`, `pull_server_backups.sh`. Авто: weekly scheduled task (локально+push) + **cron на дроплете УСТАНОВЛЕН** (03:00 UTC, KEEP=7; см. `docs/BACKUP.md`). `backups/` в .gitignore.
 
 **Реальная структура кода (НЕ та, что в §9 — та была первоначальным планом):**
 ```
@@ -166,7 +166,7 @@ Python · **LangChain** (загрузчики/сплиттеры/обвязка)
 ### 8.6 (2026-06-22) Бэкап-система ✅
 - **Цель:** ничего не потерять, восстановить с нуля. Карта данных: код/данные → GitHub; незаменимое → SQLite на сервере (логи чата + RIASEC).
 - **Скрипты `scripts/`:** `backup_local.sh` (tar.gz всей папки, retention 10), `backup_server.sh` (online-бэкап SQLite через python в контейнере + тома `qdrant_data`/`openwebui-data` + `.env`, шифрование по `BACKUP_PASSPHRASE`), `restore_server.sh`, `pull_server_backups.sh` (rsync с дроплета).
-- **Авто:** weekly scheduled task `alatoo-weekly-backup` (Пн 09:00, локальный архив + git push); на сервере — cron `0 3 * * *` (см. `docs/BACKUP.md`). Первый локальный снимок снят и проверен (~10 МБ, 124 файла).
+- **Авто:** weekly scheduled task `alatoo-weekly-backup` (Пн 09:00, локальный архив + git push); на сервере — cron `0 3 * * *` УСТАНОВЛЕН и проверен (первый серверный архив 967 МБ: SQLite+Qdrant+OpenWebUI+.env). Первый локальный снимок снят и проверен (~10 МБ, 124 файла).
 - **Среда:** подключённая папка БЛОКИРУЕТ удаление файлов, но разрешает rename → перед git-операциями переименовываем `.git/*.lock` в сторону (`mv L L.stale-TS`); предупреждения 'unable to unlink' безвредны.
 - Runbook восстановления с нуля — `docs/BACKUP.md`.
 

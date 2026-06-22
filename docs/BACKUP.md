@@ -66,11 +66,11 @@ bash scripts/restore_server.sh backups/server/alatoo-server-20260622-030000.tar.
 открыто приложение Claude; если было закрыто — выполнится при следующем запуске.
 
 ### На сервере (каждую ночь) — cron на дроплете
-Поставить один раз:
+**УСТАНОВЛЕНО 2026-06-22** (03:00 UTC, хранит 7 архивов, без шифрования .env). Строка cron:
 ```bash
 crontab -e
 # каждый день в 03:00 по серверному времени:
-0 3 * * * cd /opt/alatoo-ai-consultant && BACKUP_PASSPHRASE='ВАШ_ПАРОЛЬ' bash scripts/backup_server.sh >> /var/log/alatoo-backup.log 2>&1
+0 3 * * * cd /opt/alatoo-ai-consultant && KEEP=7 bash scripts/backup_server.sh >> /var/log/alatoo-backup.log 2>&1
 ```
 Раз в неделю стягивать архивы домой `pull_server_backups.sh` (или добавить в cron на ноуте).
 

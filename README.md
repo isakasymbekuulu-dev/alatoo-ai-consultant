@@ -71,4 +71,12 @@ EMBED_DIM=1536
 
 ## CI/CD (авто-деплой)
 `.github/workflows/deploy.yml` при пуше в `main` заходит на дроплет по SSH,
-делает `git reset --hard origin/main`, `docker compose up -d --bui
+делает `git reset --hard origin/main`, `docker compose up -d --build` и
+переиндексирует Qdrant (только если менялись `data/` или `ingestion/`).
+Один раз добавить секреты в **Settings → Secrets and variables → Actions**:
+`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_PATH` (и при нужде `DEPLOY_PORT`).
+Ручной запуск — вкладка **Actions → Deploy to droplet → Run workflow**.
+
+## Дальше (roadmap)
+RIASEC-тест (ветка LangGraph) · скрейпинг сайта (Bright Data) ·
+каналы Telegram/WhatsApp/Meta к тому же `/v1` · TLS+домен · rate-limit.

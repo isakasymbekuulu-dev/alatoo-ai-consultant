@@ -14,3 +14,4 @@ pytest-cache-files-*/
 
 # backup archives (large; kept locally, not in git)
 backups/
+*.bak

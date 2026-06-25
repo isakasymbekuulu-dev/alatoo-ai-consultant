@@ -187,17 +187,38 @@ def _faculty_from(headers: dict) -> str:
     return ""
 
 
+# Per-section override: a multi-topic file (e.g. the compiled university
+# handbook) can point each section at its own canonical page by placing an
+# HTML comment right under the heading:  <!-- source_url: https://... -->
+# Falls back to the file-level front-matter source_url when absent.
+_SECTION_URL_RE = re.compile(r"<!--\s*source_url:\s*(\S+?)\s*-->")
+
+
 def docs_from_markdown(text: str, base_meta: dict) -> List[Document]:
     out: List[Document] = []
+    file_url = base_meta.get("source_url", "")
+    by_h2: dict = {}                       # H2-level URL, inherited by its H3 children
     for sec in _MD_HEADERS.split_text(text):
         headers = {k: v for k, v in sec.metadata.items() if k in ("h1", "h2", "h3")}
         trail = " > ".join(headers[k] for k in ("h1", "h2", "h3") if headers.get(k))
         section = headers.get("h3") or headers.get("h2") or headers.get("h1") or ""
         faculty = _faculty_from(headers)
-        for piece in _RECURSIVE.split_text(sec.page_content):
+        h2 = headers.get("h2", "")
+        has_h3 = bool(headers.get("h3"))
+        sec_text = sec.page_content
+        m = _SECTION_URL_RE.search(sec_text)
+        if m:
+            sec_url = m.group(1)
+            sec_text = (sec_text[:m.start()] + sec_text[m.end():])
+            if h2 and not has_h3:          # marker on an H2 intro -> inherited by its H3s
+                by_h2[h2] = sec_url
+        else:
+            sec_url = by_h2.get(h2, file_url)
+        for piece in _RECURSIVE.split_text(sec_text):
             content = (trail + "\n" + piece).strip() if trail else piece.strip()
             md = dict(base_meta)
             md.update({"section": section, "faculty": faculty,
+                       "source_url": sec_url,
                        "title": section or base_meta.get("title", "")})
             out.append(Document(page_content=content, metadata=md))
     return out

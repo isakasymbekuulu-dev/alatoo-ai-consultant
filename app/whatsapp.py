@@ -1,0 +1,150 @@
+"""WhatsApp Cloud API (Meta) adapter — a thin bridge to the existing backend.
+
+    GET  /webhooks/whatsapp  -> Meta webhook verification (echoes hub.challenge)
+    POST /webhooks/whatsapp  -> incoming text -> run_graph -> chat() -> send reply
+
+The same dialog brain powers every channel: we just turn an inbound WhatsApp
+message into the backend's `history` format, get the answer, and POST it back
+through the Graph API. The sender's WhatsApp number becomes the session_id so
+conversation logging stays per-user.
+
+Config (app.config.settings, from .env):
+    whatsapp_verify_token     must match the "Verify token" set in the Meta webhook
+    whatsapp_token            Cloud API access token (System User token recommended)
+    whatsapp_phone_number_id  the sending number's Phone Number ID
+    whatsapp_app_secret       optional; if set, X-Hub-Signature-256 is verified
+    whatsapp_api_version      Graph API version (default v21.0)
+"""
+import hashlib
+import hmac
+import logging
+from collections import deque
+
+import httpx
+from fastapi import APIRouter, BackgroundTasks, Request, Query
+from fastapi.responses import PlainTextResponse, JSONResponse
+
+from app.config import settings
+from app import logging_store
+from app.graph import run_graph
+from app.llm import chat
+
+log = logging.getLogger("alatoo.whatsapp")
+router = APIRouter()
+
+# Small in-memory guard against Meta's webhook retries (same message delivered
+# more than once). Bounded; resets on restart — fine for at-least-once delivery.
+_seen_ids: deque = deque(maxlen=512)
+_seen_set: set = set()
+
+_NON_TEXT_REPLY = ("Пока я понимаю только текстовые сообщения. "
+                   "Напишите вопрос текстом — и я помогу.")
+
+
+def _graph_api() -> str:
+    return "https://graph.facebook.com/" + settings.whatsapp_api_version
+
+
+def _valid_signature(body: bytes, header: str) -> bool:
+    """Verify X-Hub-Signature-256 if an app secret is configured."""
+    secret = settings.whatsapp_app_secret
+    if not secret:
+        return True  # signature verification disabled
+    if not header or not header.startswith("sha256="):
+        return False
+    expected = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, header.split("=", 1)[1])
+
+
+def _send_text(to: str, text: str) -> None:
+    token = settings.whatsapp_token
+    pnid = settings.whatsapp_phone_number_id
+    if not token or not pnid:
+        log.error("WhatsApp send skipped: token or phone_number_id not configured")
+        return
+    url = "%s/%s/messages" % (_graph_api(), pnid)
+    payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": to,
+        "type": "text",
+        "text": {"preview_url": True, "body": text[:4096]},
+    }
+    try:
+        r = httpx.post(url, json=payload,
+                       headers={"Authorization": "Bearer " + token}, timeout=30)
+        if r.status_code >= 400:
+            log.error("WhatsApp send failed %s: %s", r.status_code, r.text[:300])
+    except Exception as e:  # noqa: BLE001
+        log.error("WhatsApp send error: %s", e)
+
+
+def _answer_for(text: str, session_id: str) -> str:
+    history = [{"role": "user", "content": text}]
+    messages, chunks, intent, trace = run_graph(history, riasec_summary=None)
+    answer = chat(messages)
+    try:
+        sources = [{"title": c.get("title", ""), "source": c.get("source", ""),
+                    "source_url": c.get("source_url", ""),
+                    "score": round(c.get("score", 0), 3)} for c in chunks]
+        logging_store.log_turn(session_id, "whatsapp", text, answer, sources, False)
+    except Exception as e:  # noqa: BLE001 — never let logging break a reply
+        log.warning("WhatsApp log_turn failed: %s", e)
+    return answer
+
+
+def _process(value: dict) -> None:
+    """Handle one webhook 'value' object: reply to any text messages in it."""
+    for msg in value.get("messages", []) or []:
+        mid = msg.get("id")
+        if mid:
+            if mid in _seen_set:
+                continue
+            _seen_set.add(mid)
+            _seen_ids.append(mid)
+            if len(_seen_ids) == _seen_ids.maxlen:
+                # keep the set bounded alongside the deque
+                while len(_seen_set) > _seen_ids.maxlen:
+                    _seen_set.discard(_seen_ids[0])
+        sender = msg.get("from")
+        if not sender:
+            continue
+        session_id = "wa-" + sender
+        if msg.get("type") == "text":
+            text = (msg.get("text") or {}).get("body", "").strip()
+            if not text:
+                continue
+            reply = _answer_for(text, session_id)
+        else:
+            reply = _NON_TEXT_REPLY
+        _send_text(sender, reply)
+
+
+@router.get("/webhooks/whatsapp")
+def verify(hub_mode: str = Query("", alias="hub.mode"),
+           hub_challenge: str = Query("", alias="hub.challenge"),
+           hub_verify_token: str = Query("", alias="hub.verify_token")):
+    """Meta webhook verification handshake."""
+    if (hub_mode == "subscribe" and settings.whatsapp_verify_token
+            and hub_verify_token == settings.whatsapp_verify_token):
+        return PlainTextResponse(hub_challenge)
+    return PlainTextResponse("forbidden", status_code=403)
+
+
+@router.post("/webhooks/whatsapp")
+async def incoming(request: Request, background: BackgroundTasks):
+    body = await request.body()
+    if not _valid_signature(body, request.headers.get("x-hub-signature-256", "")):
+        return JSONResponse({"error": "bad signature"}, status_code=403)
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": True})  # ack non-JSON pings
+    # Acknowledge fast (Meta retries slow endpoints); do the LLM work in the
+    # background so the webhook returns 200 immediately.
+    for entry in data.get("entry", []) or []:
+        for change in entry.get("changes", []) or []:
+            value = change.get("value") or {}
+            if value.get("messages"):
+                background.add_task(_process, value)
+    return JSONResponse({"ok": True})

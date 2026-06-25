@@ -31,13 +31,17 @@ jobs:
           AZ_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
           AZ_KEY: ${{ secrets.AZURE_OPENAI_KEY }}
           AZ_DEPLOY: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
+          WA_TOKEN: ${{ secrets.WHATSAPP_TOKEN }}
+          WA_VERIFY: ${{ secrets.WHATSAPP_VERIFY_TOKEN }}
+          WA_PNID: ${{ secrets.WHATSAPP_PHONE_NUMBER_ID }}
+          WA_APP_SECRET: ${{ secrets.WHATSAPP_APP_SECRET }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
           command_timeout: 30m
-          envs: GROQ_KEY,OPENAI_KEY,GEMINI_KEY,AZ_ENDPOINT,AZ_KEY,AZ_DEPLOY
+          envs: GROQ_KEY,OPENAI_KEY,GEMINI_KEY,AZ_ENDPOINT,AZ_KEY,AZ_DEPLOY,WA_TOKEN,WA_VERIFY,WA_PNID,WA_APP_SECRET
           script: |
             set -euo pipefail
             cd "${{ secrets.DEPLOY_PATH }}"
@@ -81,6 +85,14 @@ jobs:
                 echo "LLM_AZURE_DEPLOYMENT=${AZ_DEPLOY}"; } >> "$ENVF"
               echo ">> Azure OpenAI configured as TOP primary"
             fi
+
+            # --- WhatsApp Cloud API channel (managed block) ---
+            sed -i '/^WHATSAPP_TOKEN=/d;/^WHATSAPP_VERIFY_TOKEN=/d;/^WHATSAPP_PHONE_NUMBER_ID=/d;/^WHATSAPP_APP_SECRET=/d' "$ENVF"
+            [ -n "${WA_TOKEN:-}" ]      && echo "WHATSAPP_TOKEN=${WA_TOKEN}" >> "$ENVF"
+            [ -n "${WA_VERIFY:-}" ]     && echo "WHATSAPP_VERIFY_TOKEN=${WA_VERIFY}" >> "$ENVF"
+            [ -n "${WA_PNID:-}" ]       && echo "WHATSAPP_PHONE_NUMBER_ID=${WA_PNID}" >> "$ENVF"
+            [ -n "${WA_APP_SECRET:-}" ] && echo "WHATSAPP_APP_SECRET=${WA_APP_SECRET}" >> "$ENVF"
+            [ -n "${WA_VERIFY:-}" ] && echo ">> WhatsApp channel configured"
 
             docker compose up -d --build --force-recreate backend
             docker compose up -d qdrant openwebui

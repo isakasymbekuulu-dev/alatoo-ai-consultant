@@ -72,5 +72,15 @@ class Settings(BaseSettings):
     # Rate limiting for the public chat (per client IP, per minute)
     rate_limit_per_min: int = 20
 
+    # --- WhatsApp Cloud API (Meta) channel adapter ---
+    # Thin webhook bridge to the same dialog backend. All values come from the
+    # Meta App > WhatsApp setup; the access token + app secret are secrets and
+    # are injected into .env from GitHub Secrets by the deploy workflow.
+    whatsapp_verify_token: str = ""        # arbitrary string; must match Meta webhook "Verify token"
+    whatsapp_token: str = ""               # Cloud API access token (System User token recommended)
+    whatsapp_phone_number_id: str = ""     # e.g. 1155572644311757 (test number)
+    whatsapp_app_secret: str = ""          # optional: verify X-Hub-Signature-256 on incoming payloads
+    whatsapp_api_version: str = "v21.0"
+
 
 settings = Settings()

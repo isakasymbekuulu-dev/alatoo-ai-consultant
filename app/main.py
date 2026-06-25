@@ -17,6 +17,7 @@ from app.config import settings
 from app.llm import chat, chat_stream
 from app.rag import build_messages
 from app.graph import run_graph, GRAPH_SPEC
+from app.whatsapp import router as whatsapp_router
 
 app = FastAPI(title="AlaToo AI Consultant")
 logging_store.init()
@@ -27,6 +28,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# WhatsApp Cloud API webhook (thin adapter to the same dialog backend)
+app.include_router(whatsapp_router)
 
 STATIC_DIR = Path(__file__).parent / "static"
 

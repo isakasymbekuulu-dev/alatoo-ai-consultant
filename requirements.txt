@@ -25,3 +25,6 @@ charset-normalizer==3.4.1
 
 # Dialog orchestration
 langgraph>=0.2.0,<0.3.0
+
+# WhatsApp Cloud API adapter (Graph API calls)
+httpx==0.28.1

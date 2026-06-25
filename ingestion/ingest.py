@@ -107,6 +107,49 @@ def load_file(path: Path) -> str:
     return ""
 
 
+# ---------- front-matter (source_url + optional metadata overrides) ----------
+# Lets a .md/.txt file declare its origin URL (and optionally override title,
+# lang, etc.) in a leading YAML-style block, so RAG answers can cite real links.
+#   ---
+#   source_url: https://www.alatoo.edu.kg/admission
+#   title: Поступление
+#   ---
+_FM_OVERRIDE_KEYS = {
+    "source_url", "title", "source", "lang", "doc_type", "faculty", "program",
+}
+
+
+def parse_front_matter(text: str) -> tuple[dict, str]:
+    """Parse a leading '---' fenced block of simple ``key: value`` lines.
+
+    Returns ``(meta, body)``. Only keys in ``_FM_OVERRIDE_KEYS`` are kept. If
+    there is no opening fence, no closing fence, or no recognised key, the text
+    is returned untouched (so a leading Markdown horizontal rule is not eaten).
+    """
+    stripped = text.lstrip("﻿").lstrip()
+    if not stripped.startswith("---"):
+        return {}, text
+    lines = stripped.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}, text
+    meta: dict = {}
+    end = None
+    for i in range(1, len(lines)):
+        if lines[i].strip() in ("---", "..."):
+            end = i
+            break
+        m = re.match(r"\s*([A-Za-z_][\w-]*)\s*:\s*(.*?)\s*$", lines[i])
+        if m:
+            key = m.group(1).strip()
+            val = m.group(2).strip().strip('"').strip("'")
+            if key in _FM_OVERRIDE_KEYS and val:
+                meta[key] = val
+    if end is None or not meta:
+        return {}, text
+    body = "\n".join(lines[end + 1:])
+    return meta, body
+
+
 # ---------- clean ----------
 def clean_text(text: str) -> str:
     text = ftfy.fix_text(text)
@@ -188,7 +231,11 @@ def build_documents(data_dir: Path) -> List[Document]:
         if ext in (".txt", ".md", ".csv") and raw_corruption_ratio(path) >= 0.2:
             print("  - SKIP (corrupted encoding): " + path.name)
             continue
-        text = clean_text(load_file(path))
+        raw = load_file(path)
+        fm = {}
+        if ext in (".md", ".txt"):
+            fm, raw = parse_front_matter(raw)
+        text = clean_text(raw)
         if not text:
             print("  - skip (empty): " + path.name)
             continue
@@ -205,6 +252,8 @@ def build_documents(data_dir: Path) -> List[Document]:
             "source_url": "",
             "updated_at": int(path.stat().st_mtime),
         }
+        for k, v in fm.items():          # front-matter overrides (source_url, title, ...)
+            base_meta[k] = v
         docs = docs_from_markdown(text, base_meta) if ext == ".md" else docs_from_plain(text, base_meta)
 
         kept = 0

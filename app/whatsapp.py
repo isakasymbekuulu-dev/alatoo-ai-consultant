@@ -40,6 +40,26 @@ _seen_set: set = set()
 _NON_TEXT_REPLY = ("Пока я понимаю только текстовые сообщения. "
                    "Напишите вопрос текстом — и я помогу.")
 
+# WhatsApp text messages have no Markdown links: "[label](url)" renders literally
+# and looks broken. We convert them to a WhatsApp-native form — *bold label* on
+# one line, the raw (auto-clickable) URL on the next — and turn **bold** into
+# WhatsApp's single-asterisk bold. The web chat keeps real Markdown (web only).
+_SITE_BASE = "https://chat.alatoogpt.xyz"
+_MD_LINK = re.compile(r"\[([^\]]+)\]\((https?://[^\s)]+|/[^\s)]+)\)")
+_MD_BOLD = re.compile(r"\*\*([^*\n]+)\*\*")
+
+
+def _wa_format(text: str) -> str:
+    def link(m):
+        label = m.group(1).strip()
+        url = m.group(2).strip()
+        if url.startswith("/"):
+            url = _SITE_BASE + url
+        return "*%s*\n%s" % (label, url)
+    text = _MD_LINK.sub(link, text)
+    text = _MD_BOLD.sub(r"*\1*", text)
+    return text
+
 
 def _graph_api() -> str:
     return "https://graph.facebook.com/" + settings.whatsapp_api_version
@@ -82,7 +102,7 @@ def _send_text(to: str, text: str) -> None:
 def _answer_for(text: str, session_id: str) -> str:
     history = [{"role": "user", "content": text}]
     messages, chunks, intent, trace = run_graph(history, riasec_summary=None)
-    answer = chat(messages)
+    answer = _wa_format(chat(messages))
     try:
         sources = [{"title": c.get("title", ""), "source": c.get("source", ""),
                     "source_url": c.get("source_url", ""),

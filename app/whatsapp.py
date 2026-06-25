@@ -133,6 +133,42 @@ def _riasec_summary(session_id: str):
         return None
 
 
+_PUSH_L = {
+    "ru": ("🎯 Ваш результат теста профориентации готов!",
+           "Ваш код по методике Голланда",
+           "Подходящие программы Ала-Тоо для вас",
+           "Хотите обсудить результат или узнать подробнее о какой-то программе? Просто напишите — и я помогу."),
+    "ky": ("🎯 Кесиптик багыт тестиңиздин жыйынтыгы даяр!",
+           "Голланд методикасы боюнча кодуңуз",
+           "Сизге ылайыктуу Ала-Тоо программалары",
+           "Жыйынтыкты талкуулайбызбы же кайсы бир программа жөнүндө кеңири билгиңиз келеби? Жазыңыз — жардам берем."),
+    "en": ("🎯 Your career test result is ready!",
+           "Your Holland code",
+           "Programs at Ala-Too that fit you",
+           "Want to discuss your result or learn more about a program? Just message me — I'll help."),
+}
+
+
+def _format_riasec_push(result: dict, lang: str, name=None) -> str:
+    L = _PUSH_L.get(lang, _PUSH_L["ru"])
+    greet = ("%s, " % name) if name else ""
+    lines = [greet + L[0], "", "%s: *%s*" % (L[1], result.get("code", "")), "", L[2] + ":"]
+    for i, r in enumerate((result.get("recommendations") or [])[:5], 1):
+        lines.append("%d. *%s* (%s) — %s%%" % (
+            i, r.get("program", ""), r.get("faculty", ""), r.get("match", "")))
+    lines += ["", L[3]]
+    return "\n".join(lines)
+
+
+def push_riasec_result(to: str, result: dict, lang: str = "ru", name=None) -> None:
+    """Proactively message the WhatsApp user their test result right after submit,
+    so when they return to WhatsApp the result is already waiting (no need to ask)."""
+    try:
+        _send_text(to, _format_riasec_push(result, lang, name))
+    except Exception as e:  # noqa: BLE001 — never break the test submit
+        log.warning("WhatsApp riasec push failed: %s", e)
+
+
 def _answer_for(text: str, session_id: str) -> str:
     history = [{"role": "user", "content": text}]
     messages, chunks, intent, trace = run_graph(history, riasec_summary=_riasec_summary(session_id))

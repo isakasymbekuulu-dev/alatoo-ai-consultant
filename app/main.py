@@ -235,6 +235,12 @@ def riasec_submit(req: RiasecSubmit, request: Request):
         f"Пройден профориентационный тест RIASEC{(' — ' + name) if name else ''}",
         riasec.summary_for_llm(result, name=name), [], req.consent,
     )
+    if session_id.startswith("wa-"):       # came from WhatsApp: push the result proactively
+        try:
+            from app import whatsapp
+            whatsapp.push_riasec_result(session_id[3:], result, req.lang, name)
+        except Exception:
+            pass
     return {
         "result_id": result_id,
         "session_id": session_id,

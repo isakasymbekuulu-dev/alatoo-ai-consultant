@@ -19,6 +19,7 @@ import hashlib
 import hmac
 import logging
 import re
+import secrets
 from collections import deque
 
 import httpx
@@ -26,7 +27,7 @@ from fastapi import APIRouter, BackgroundTasks, Request, Query
 from fastapi.responses import PlainTextResponse, JSONResponse
 
 from app.config import settings
-from app import logging_store
+from app import logging_store, riasec
 from app.graph import run_graph
 from app.llm import chat
 
@@ -50,16 +51,22 @@ _MD_LINK = re.compile(r"\[([^\]]+)\]\((https?://[^\s)]+|/[^\s)]+)\)")
 _MD_BOLD = re.compile(r"\*\*([^*\n]+)\*\*")
 
 
-def _wa_format(text: str) -> str:
+def _wa_format(text: str, session_id: str = None) -> str:
     def link(m):
         label = m.group(1).strip()
         url = m.group(2).strip()
         if url.startswith("/test"):
-            # came from WhatsApp -> after the test, return the user here, not to web chat
+            # came from WhatsApp -> carry source + an opaque token that ties the
+            # test result back to this wa session (no phone number in the URL),
+            # and return the user to WhatsApp after the test.
             q = "src=wa"
             num = (settings.whatsapp_display_number or "").strip()
             if num:
                 q += "&wa=" + num
+            if session_id:
+                tok = secrets.token_urlsafe(9)
+                logging_store.save_wa_token(tok, session_id)
+                q += "&t=" + tok
             url = _SITE_BASE + url + ("&" if "?" in url else "?") + q
         elif url.startswith("/"):
             url = _SITE_BASE + url
@@ -107,10 +114,29 @@ def _send_text(to: str, text: str) -> None:
         log.error("WhatsApp send error: %s", e)
 
 
+def _riasec_summary(session_id: str):
+    """If this wa-user took the profiling test (result saved under their wa session),
+    return a short summary so the bot can discuss it back in WhatsApp."""
+    try:
+        stored = logging_store.riasec_for_session(session_id)
+        if not stored:
+            return None
+        result = {
+            "code": stored["code"],
+            "scores": stored["scores"]["scores"],
+            "percents": stored["scores"]["percents"],
+            "ranked": stored["scores"]["ranked"],
+            "recommendations": stored["recs"],
+        }
+        return riasec.summary_for_llm(result, name=stored.get("name"))
+    except Exception:
+        return None
+
+
 def _answer_for(text: str, session_id: str) -> str:
     history = [{"role": "user", "content": text}]
-    messages, chunks, intent, trace = run_graph(history, riasec_summary=None)
-    answer = _wa_format(chat(messages))
+    messages, chunks, intent, trace = run_graph(history, riasec_summary=_riasec_summary(session_id))
+    answer = _wa_format(chat(messages), session_id)
     try:
         sources = [{"title": c.get("title", ""), "source": c.get("source", ""),
                     "source_url": c.get("source_url", ""),

@@ -53,6 +53,7 @@ class RiasecSubmit(BaseModel):
     chat_id: Optional[str] = None
     consent: bool = False
     name: Optional[str] = None
+    token: Optional[str] = None   # opaque token from a WhatsApp test link -> wa session
 
 
 def _check_auth(authorization: Optional[str]) -> None:
@@ -219,6 +220,10 @@ def riasec_submit(req: RiasecSubmit, request: Request):
 
     result_id = riasec.new_result_id()
     session_id = req.chat_id or f"riasec-{result_id}"
+    if req.token:                       # came from WhatsApp: save under the wa session
+        wa_sid = logging_store.resolve_wa_token(req.token)
+        if wa_sid:
+            session_id = wa_sid
     name = (req.name or "").strip() or None
     logging_store.save_riasec(
         result_id, session_id, req.lang, result["code"],

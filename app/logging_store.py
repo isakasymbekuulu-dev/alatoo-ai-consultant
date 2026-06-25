@@ -56,6 +56,15 @@ def init() -> None:
                 c.execute("ALTER TABLE riasec_results ADD COLUMN name TEXT")
             c.execute(
                 """
+                CREATE TABLE IF NOT EXISTS wa_test_tokens (
+                    token      TEXT PRIMARY KEY,
+                    session_id TEXT,
+                    ts         INTEGER
+                )
+                """
+            )
+            c.execute(
+                """
                 CREATE TABLE IF NOT EXISTS graph_traces (
                     id         INTEGER PRIMARY KEY AUTOINCREMENT,
                     ts         TEXT,
@@ -308,3 +317,39 @@ def analytics() -> dict:
     except Exception as e:
         print(f"[log] analytics failed: {e}")
     return out
+
+
+# --- WhatsApp ↔ profiling-test token map -------------------------------------
+# When the bot sends the RIASEC test link over WhatsApp, we attach an opaque
+# token (NOT the phone number) that maps to the user's wa-<number> session, so
+# the test result is saved under that session and the bot can discuss it back
+# in WhatsApp.
+def save_wa_token(token: str, session_id: str) -> None:
+    if not token or not session_id:
+        return
+    try:
+        with _lock, _connect() as c:
+            c.execute(
+                "INSERT OR REPLACE INTO wa_test_tokens(token, session_id, ts) VALUES (?,?,?)",
+                (token, session_id, int(time.time())),
+            )
+    except Exception:
+        pass
+
+
+def resolve_wa_token(token: str):
+    if not token:
+        return None
+    try:
+        with _lock, _connect() as c:
+            row = c.execute(
+                "SELECT session_id, ts FROM wa_test_tokens WHERE token=?", (token,)
+            ).fetchone()
+    except Exception:
+        return None
+    if not row:
+        return None
+    sid, ts = row
+    if int(time.time()) - int(ts or 0) > 86400:   # tokens valid 24h
+        return None
+    return sid

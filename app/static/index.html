@@ -12,6 +12,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Ar
 
 /* sidebar */
 .side{width:264px;flex:0 0 auto;background:var(--side);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:10px;transition:margin-left .25s}
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:15;display:none}
 .new{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:9px;padding:10px 12px;font-size:14px;cursor:pointer;color:var(--txt)}
 .new:hover{background:var(--surf)}
 .shead{font-size:11px;color:var(--mut);padding:14px 12px 6px}
@@ -83,6 +84,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Ar
 @media(max-width:720px){
   .side{position:absolute;z-index:20;height:100%;margin-left:-280px}
   .side.open{margin-left:0}
+  .scrim.show{display:block}
   .menu{display:grid;place-items:center}
   .row.me .tx,.tx{max-width:88%}
 }
@@ -95,6 +97,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Ar
   <div class="list" id="histList" style="display:none"></div>
   <div class="urow"><span class="uav">Аб</span><span style="font-size:13.5px;color:#cfcfcf">Абитуриент</span></div>
 </aside>
+<div class="scrim" id="scrim"></div>
 
 <main class="main">
   <div class="bar">
@@ -220,9 +223,13 @@ function autoGrow(t){t.style.height='auto';t.style.height=Math.min(t.scrollHeigh
 $('wsend').onclick=()=>submit($('wq'));
 $('dsend').onclick=()=>submit($('dq'));
 $('sug').addEventListener('click',e=>{if(e.target.classList.contains('s')&&e.target.id!=='testLink')ask(e.target.textContent);});
-$('newChat').onclick=()=>{newChat();side.classList.remove('open');};
-histList.addEventListener('click',e=>{const it=e.target.closest('.item');if(it){openChat(it.dataset.id);side.classList.remove('open');}});
-$('menuBtn').onclick=()=>side.classList.toggle('open');
+const scrim=$('scrim');
+function closeSide(){side.classList.remove('open');scrim.classList.remove('show');}
+function openSide(){side.classList.add('open');scrim.classList.add('show');}
+$('newChat').onclick=()=>{newChat();closeSide();};
+histList.addEventListener('click',ev=>{const it=ev.target.closest('.item');if(it){openChat(it.dataset.id);closeSide();}});
+$('menuBtn').onclick=()=>side.classList.contains('open')?closeSide():openSide();
+scrim.onclick=closeSide;
 
 /* ---- RIASEC test integration ---- */
 // Send the user to the test keeping the current chat id, so results come back here.

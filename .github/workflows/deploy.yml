@@ -104,14 +104,28 @@ jobs:
               echo ">> изменений в данных нет — переиндексация пропущена"
             fi
 
-            echo ">> warmup"
+            echo ">> warmup (триггерим загрузку моделей)"
             sleep 3
             curl -s -m 600 -o /dev/null -w "warmup HTTP %{http_code}\n" \
               http://localhost:8000/v1/chat/completions \
               -H 'Content-Type: application/json' \
               -d '{"model":"alatoo-rag","stream":false,"messages":[{"role":"user","content":"тест"}]}' || true
 
+            # --- health gate: битый бэкенд ДОЛЖЕН валить деплой (и сразу видно) ---
+            echo ">> health gate: ждём /healthz = 200"
+            ok=0
+            for i in $(seq 1 30); do
+              code=$(curl -s -m 10 -o /dev/null -w "%{http_code}" http://localhost:8000/healthz || true)
+              if [ "$code" = "200" ]; then ok=1; echo ">> healthz OK (попытка $i)"; break; fi
+              echo ">> healthz=$code — ждём… ($i/30)"; sleep 5
+            done
             docker compose ps
+            if [ "$ok" != "1" ]; then
+              echo "!! Бэкенд не отвечает 200 на /healthz — деплой провален. Логи backend:"
+              docker compose logs --tail=80 backend || true
+              exit 1
+            fi
+            echo ">> деплой здоров: /healthz=200"
 
   eval:
     needs: deploy

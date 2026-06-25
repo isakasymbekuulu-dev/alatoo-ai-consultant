@@ -151,6 +151,26 @@ def build_messages(
         "content": "КОНТЕКСТ (выдержки из базы знаний вуза):\n\n" + context,
     })
     messages.extend(convo)
-    # Language directive LAST so it dominates the (Russian) context.
+    # Language directive near the end so it dominates the (Russian) context.
     messages.append({"role": "system", "content": answer_directive(lang)})
+
+    # Source reminder LAST, with the concrete links available for THIS answer, so
+    # the (small) model reliably ends with clickable "Источники:" instead of
+    # silently dropping them. Only the URLs actually present in the retrieved
+    # context are offered, so the model cannot invent links.
+    seen, srcs = set(), []
+    for c in chunks:
+        u = (c.get("source_url") or "").strip()
+        if u and u not in seen:
+            seen.add(u)
+            srcs.append((c.get("title") or c.get("source") or u, u))
+    if srcs:
+        listing = "\n".join("- [%s](%s)" % (t, u) for t, u in srcs)
+        messages.append({"role": "system", "content": (
+            "НАПОМИНАНИЕ ОБ ИСТОЧНИКАХ. Для этого ответа в контексте есть источники с URL:\n"
+            + listing +
+            "\nЕсли ты использовал сведения из них, ОБЯЗАТЕЛЬНО заверши ответ строкой "
+            "«Источники:» и перечисли соответствующие ссылки в формате [название](URL). "
+            "Не указывай источники, сведения из которых не использовал; URL не выдумывай. "
+            "Пиши на языке пользователя.")})
     return messages, chunks

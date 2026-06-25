@@ -353,3 +353,15 @@ def resolve_wa_token(token: str):
     if int(time.time()) - int(ts or 0) > 86400:   # tokens valid 24h
         return None
     return sid
+
+
+def clear_riasec(session_id: str) -> None:
+    """Drop a session's profiling-test result (used by the WhatsApp «новый чат» /
+    «пройти тест заново» commands so the bot starts fresh)."""
+    if not session_id:
+        return
+    try:
+        with _lock, _connect() as c:
+            c.execute("DELETE FROM riasec_results WHERE session_id=?", (session_id,))
+    except Exception:
+        pass

@@ -42,6 +42,49 @@ _seen_set: set = set()
 _NON_TEXT_REPLY = ("Пока я понимаю только текстовые сообщения. "
                    "Напишите вопрос текстом — и я помогу.")
 
+WA_DIRECTIVE = (
+    "КАНАЛ: WhatsApp. Учитывай:\n"
+    "- Ты общаешься в WhatsApp, а не на сайте. НЕ советуй «обновить страницу», "
+    "«нажать Новый чат» или другие действия веб-интерфейса — их здесь нет.\n"
+    "- Чтобы пройти тест профориентации заново или начать диалог заново, пользователь "
+    "пишет «пройти тест заново» или «новый чат» — подскажи это, если он спрашивает, как начать сначала.\n"
+    "- Пиши простым текстом, без markdown-заголовков и таблиц. Ссылки давай как обычный URL.\n"
+    "Отвечай на языке пользователя."
+)
+
+_RESET_REPLY = (
+    "Готово — начинаем с чистого листа, прежние результаты теста сброшены. "
+    "Чем могу помочь? Если хотите пройти тест профориентации — напишите «пройти тест»."
+)
+
+
+def _is_retake(t: str) -> bool:
+    again = ("заново", "заного", "снова", "сначала", "ещё раз", "еще раз",
+             "ещёраз", "ещераз", "по новой", "по-новой", "again", "retake", "повтор")
+    test = ("тест", "test", "профориент", "пройти")
+    return any(a in t for a in again) and any(x in t for x in test)
+
+
+def _is_reset(t: str) -> bool:
+    keys = ("новый чат", "новый диалог", "новый разговор", "начать заново",
+            "начни заново", "начать сначала", "сброс", "сбрось", "очистить истори",
+            "очисти истори", "очистить контекст", "с чистого листа", "clear", "reset",
+            "/new", "/reset")
+    return any(k in t for k in keys)
+
+
+def _test_invite(session_id: str) -> str:
+    num = (settings.whatsapp_display_number or "").strip()
+    q = "src=wa" + ("&wa=" + num if num else "")
+    tok = secrets.token_urlsafe(9)
+    logging_store.save_wa_token(tok, session_id)
+    q += "&t=" + tok
+    url = _SITE_BASE + "/test?" + q
+    return ("Открываю тест профориентации заново (≈7 минут, 60 вопросов):\n" + url +
+            "\n\nПосле прохождения результат придёт сюда, в WhatsApp.")
+
+
+
 # WhatsApp text messages have no Markdown links: "[label](url)" renders literally
 # and looks broken. We convert them to a WhatsApp-native form — *bold label* on
 # one line, the raw (auto-clickable) URL on the next — and turn **bold** into
@@ -172,6 +215,7 @@ def push_riasec_result(to: str, result: dict, lang: str = "ru", name=None) -> No
 def _answer_for(text: str, session_id: str) -> str:
     history = [{"role": "user", "content": text}]
     messages, chunks, intent, trace = run_graph(history, riasec_summary=_riasec_summary(session_id))
+    messages.append({"role": "system", "content": WA_DIRECTIVE})   # WhatsApp-channel role
     answer = _wa_format(chat(messages), session_id)
     try:
         sources = [{"title": c.get("title", ""), "source": c.get("source", ""),
@@ -204,7 +248,15 @@ def _process(value: dict) -> None:
             text = (msg.get("text") or {}).get("body", "").strip()
             if not text:
                 continue
-            reply = _answer_for(text, session_id)
+            low = text.lower()
+            if _is_retake(low):
+                logging_store.clear_riasec(session_id)
+                reply = _test_invite(session_id)
+            elif _is_reset(low):
+                logging_store.clear_riasec(session_id)
+                reply = _RESET_REPLY
+            else:
+                reply = _answer_for(text, session_id)
         else:
             reply = _NON_TEXT_REPLY
         _send_text(sender, reply)

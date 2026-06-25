@@ -176,6 +176,8 @@ h1{font-size:24px;font-weight:600;text-align:center;margin-bottom:12px}
 const $=id=>document.getElementById(id);
 const params=new URLSearchParams(location.search);
 const chatId=params.get('chat')||'';
+const src=params.get('src')||'';        // 'wa' when the test was opened from WhatsApp
+const waNum=params.get('wa')||'';        // bot's dial number for the wa.me deep link back
 let lang=localStorage.getItem('alatoo_test_lang')||'ru';
 
 /* ---------- i18n ---------- */
@@ -341,6 +343,7 @@ function downloadResult(R){
 }
 $('discuss').onclick=()=>{
   if(!lastResult)return;
+  if(src==='wa'&&waNum){location.href='https://wa.me/'+waNum;return;}  // back to WhatsApp dialog
   const u=new URL('/',location.origin);
   u.searchParams.set('riasec',lastResult.result_id);
   if(chatId)u.searchParams.set('chat',chatId);
@@ -348,6 +351,7 @@ $('discuss').onclick=()=>{
 };
 
 applyI18n();
+if(src==='wa'){const _d=$('discuss');if(_d){_d.textContent='Продолжить в WhatsApp';_d.removeAttribute('data-i');}}
 </script>
 </body>
 </html>

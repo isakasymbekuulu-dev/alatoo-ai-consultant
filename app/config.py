@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     whatsapp_phone_number_id: str = ""     # e.g. 1155572644311757 (test number)
     whatsapp_app_secret: str = ""          # optional: verify X-Hub-Signature-256 on incoming payloads
     whatsapp_api_version: str = "v21.0"
+    whatsapp_display_number: str = "15552030688"   # bot's dial number for the "back to WhatsApp" deep link (wa.me/<num>); update at production cutover
 
 
 settings = Settings()

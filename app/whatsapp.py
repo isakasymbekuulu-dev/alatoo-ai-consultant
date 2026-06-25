@@ -54,7 +54,14 @@ def _wa_format(text: str) -> str:
     def link(m):
         label = m.group(1).strip()
         url = m.group(2).strip()
-        if url.startswith("/"):
+        if url.startswith("/test"):
+            # came from WhatsApp -> after the test, return the user here, not to web chat
+            q = "src=wa"
+            num = (settings.whatsapp_display_number or "").strip()
+            if num:
+                q += "&wa=" + num
+            url = _SITE_BASE + url + ("&" if "?" in url else "?") + q
+        elif url.startswith("/"):
             url = _SITE_BASE + url
         return "*%s*\n%s" % (label, url)
     text = _MD_LINK.sub(link, text)

@@ -92,11 +92,21 @@ _PROBLEM_MARKERS = ("приёмной комисси", "приемной ком�
                     "контекст не найден", "сервис ии временно")
 
 
-def _auto_problem(assistant_msg, sources) -> int:
-    """Problematic if the answer could not really help (deflected to admissions,
-    said it has no info, or the LLM-failure message)."""
+_COMPLAINT_MARKERS = ("не работает", "не помог", "бесполезн", "плохо отвеч", "плохой бот",
+                      "ужасный бот", "тупой", "дурак", "идиот", "тварь", "неправильно",
+                      "ты не прав", "это не то", "не отвечаешь", "жалоб", "отстой", "бред",
+                      "ничего не понял", "ничего не понятно", "бесит", "раздражает",
+                      "глупый", "ненавижу", "неверно ответил", "ты ошиб")
+
+
+def _auto_problem(user_msg, assistant_msg, sources) -> int:
+    """Problematic if (a) the answer could not really help (deflected to admissions,
+    said it has no info, LLM-failure), or (b) the user complained / was rude."""
     a = (assistant_msg or "").lower()
-    return 1 if any(m in a for m in _PROBLEM_MARKERS) else 0
+    if any(m in a for m in _PROBLEM_MARKERS):
+        return 1
+    u = (user_msg or "").lower()
+    return 1 if any(m in u for m in _COMPLAINT_MARKERS) else 0
 
 
 def log_turn(session_id, source, user_msg, assistant_msg, sources, consent) -> None:
@@ -113,7 +123,7 @@ def log_turn(session_id, source, user_msg, assistant_msg, sources, consent) -> N
                     assistant_msg or "",
                     json.dumps(sources, ensure_ascii=False),
                     1 if consent else 0,
-                    _auto_problem(assistant_msg, sources),
+                    _auto_problem(user_msg, assistant_msg, sources),
                 ),
             )
     except Exception as e:

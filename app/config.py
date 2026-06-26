@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     # Conversation logging
     log_db: str = "/app/logs/chat.db"
     admin_token: str = ""   # protects /admin/logs; if empty, viewer is disabled
+    # Admin login (logs panel). Cookie session is HMAC-signed with admin_token.
+    admin_user: str = "admin"
+    admin_password: str = ""   # set a secret to enable login+password access
 
     # Rate limiting for the public chat (per client IP, per minute)
     rate_limit_per_min: int = 20

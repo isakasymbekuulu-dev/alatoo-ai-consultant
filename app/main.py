@@ -1,4 +1,7 @@
 """FastAPI backend: OpenAI-compatible RAG endpoint + public chat page + logging."""
+import base64
+import hashlib
+import hmac
 import json
 import threading
 import time
@@ -7,9 +10,9 @@ from collections import defaultdict, deque
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import FastAPI, Header, HTTPException, Query, Request
+from fastapi import FastAPI, Form, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse, JSONResponse, HTMLResponse
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse, HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 
 from app import logging_store, riasec
@@ -290,28 +293,113 @@ def logo():
     raise HTTPException(status_code=404, detail="logo not found")
 
 
-def _admin_ok(token: str) -> None:
-    if not settings.admin_token or token != settings.admin_token:
+# --- Admin auth: HMAC-signed session cookie (JWT-style) + back-compat ?token= ---
+_ADMIN_COOKIE = "admin_session"
+_ADMIN_TTL = 7 * 24 * 3600
+
+
+def _b64u(b: bytes) -> str:
+    return base64.urlsafe_b64encode(b).rstrip(b"=").decode("ascii")
+
+
+def _b64u_dec(s: str) -> bytes:
+    return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
+
+
+def _sign_session(user: str) -> str:
+    if not settings.admin_token:
+        return ""
+    payload = _b64u(json.dumps({"u": user, "exp": int(time.time()) + _ADMIN_TTL}).encode())
+    sig = _b64u(hmac.new(settings.admin_token.encode(), payload.encode(), hashlib.sha256).digest())
+    return payload + "." + sig
+
+
+def _verify_session(cookie: str) -> bool:
+    if not cookie or not settings.admin_token or "." not in cookie:
+        return False
+    payload, sig = cookie.split(".", 1)
+    expected = _b64u(hmac.new(settings.admin_token.encode(), payload.encode(), hashlib.sha256).digest())
+    if not hmac.compare_digest(sig, expected):
+        return False
+    try:
+        data = json.loads(_b64u_dec(payload))
+    except Exception:
+        return False
+    return int(data.get("exp", 0)) > int(time.time())
+
+
+def _authed(request: Request) -> bool:
+    tok = request.query_params.get("token", "")
+    if settings.admin_token and tok == settings.admin_token:   # back-compat token link
+        return True
+    return _verify_session(request.cookies.get(_ADMIN_COOKIE, ""))
+
+
+def admin_guard(request: Request) -> None:
+    if not _authed(request):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
+_LOGIN_HTML = """<!DOCTYPE html><html lang=ru><head><meta charset=UTF-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>Вход - Админка</title><style>
+body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#0d0d0d;color:#ececec;display:grid;place-items:center;height:100vh;margin:0}
+form{background:#171717;border:1px solid #2b2b2b;border-radius:14px;padding:26px;width:300px;display:flex;flex-direction:column;gap:12px}
+h1{font-size:17px;margin:0 0 6px}
+input{background:#1e1e1e;border:1px solid #2b2b2b;border-radius:9px;padding:11px;color:#ececec;font-size:14px}
+button{background:#ececec;color:#111;border:0;border-radius:9px;padding:11px;font-size:14px;font-weight:600;cursor:pointer}
+.err{color:#e57373;font-size:12.5px;min-height:14px}</style></head><body>
+<form method=post action=/admin/login>
+<h1>Вход в панель логов</h1>
+<div class=err>%ERR%</div>
+<input name=user placeholder="Логин" autocomplete=username autofocus>
+<input name=password type=password placeholder="Пароль" autocomplete=current-password>
+<button type=submit>Войти</button>
+</form></body></html>"""
+
+
+@app.get("/admin", response_class=HTMLResponse)
+def admin_login_page(request: Request):
+    if _authed(request):
+        return RedirectResponse("/admin/logs", status_code=302)
+    return HTMLResponse(_LOGIN_HTML.replace("%ERR%", ""))
+
+
+@app.post("/admin/login")
+def admin_login(user: str = Form(default=""), password: str = Form(default="")):
+    if (settings.admin_password and user == settings.admin_user
+            and password == settings.admin_password):
+        resp = RedirectResponse("/admin/logs", status_code=302)
+        resp.set_cookie(_ADMIN_COOKIE, _sign_session(user), max_age=_ADMIN_TTL,
+                        httponly=True, samesite="lax", path="/admin")
+        return resp
+    return HTMLResponse(_LOGIN_HTML.replace("%ERR%", "Неверный логин или пароль"), status_code=401)
+
+
+@app.get("/admin/logout")
+def admin_logout():
+    resp = RedirectResponse("/admin", status_code=302)
+    resp.delete_cookie(_ADMIN_COOKIE, path="/admin")
+    return resp
+
+
 @app.get("/admin/api/sessions")
-def admin_sessions(token: str = Query(default="")):
-    _admin_ok(token)
+def admin_sessions(request: Request):
+    admin_guard(request)
     st = logging_store.stats()
     return {"sessions": logging_store.sessions(500),
             "total_sessions": st["sessions"], "total_messages": st["messages"]}
 
 
 @app.get("/admin/api/session")
-def admin_session(token: str = Query(default=""), id: str = Query(default="")):
-    _admin_ok(token)
+def admin_session(request: Request, id: str = Query(default="")):
+    admin_guard(request)
     return {"messages": logging_store.session_messages(id)}
 
 
 @app.get("/admin/api/riasec")
-def admin_riasec(token: str = Query(default=""), id: str = Query(default="")):
-    _admin_ok(token)
+def admin_riasec(request: Request, id: str = Query(default="")):
+    admin_guard(request)
     stored = logging_store.get_riasec(id) if id else None
     if id and not stored:
         raise HTTPException(status_code=404, detail="result not found")
@@ -319,8 +407,9 @@ def admin_riasec(token: str = Query(default=""), id: str = Query(default="")):
 
 
 @app.get("/admin/logs", response_class=HTMLResponse)
-def admin_logs(token: str = Query(default="")):
-    _admin_ok(token)
+def admin_logs(request: Request):
+    if not _authed(request):
+        return RedirectResponse("/admin", status_code=302)
     page = STATIC_DIR / "admin.html"
     if page.exists():
         return HTMLResponse(page.read_text(encoding="utf-8"))
@@ -328,28 +417,29 @@ def admin_logs(token: str = Query(default="")):
 
 
 @app.get("/admin/api/graph")
-def admin_graph(token: str = Query(default="")):
-    _admin_ok(token)
+def admin_graph(request: Request):
+    admin_guard(request)
     return GRAPH_SPEC
 
 
 @app.get("/admin/api/traces")
-def admin_traces(token: str = Query(default=""), session_id: str = Query(default="")):
-    _admin_ok(token)
+def admin_traces(request: Request, session_id: str = Query(default="")):
+    admin_guard(request)
     if session_id:
         return {"traces": logging_store.traces_for_session(session_id)}
     return {"traces": logging_store.recent_traces()}
 
 
 @app.get("/admin/api/analytics")
-def admin_analytics(token: str = Query(default="")):
-    _admin_ok(token)
+def admin_analytics(request: Request):
+    admin_guard(request)
     return logging_store.analytics()
 
 
 @app.get("/admin/graph", response_class=HTMLResponse)
-def admin_graph_page(token: str = Query(default="")):
-    _admin_ok(token)
+def admin_graph_page(request: Request):
+    if not _authed(request):
+        return RedirectResponse("/admin", status_code=302)
     page = STATIC_DIR / "graph.html"
     if page.exists():
         return HTMLResponse(page.read_text(encoding="utf-8"))

@@ -35,13 +35,15 @@ jobs:
           WA_VERIFY: ${{ secrets.WHATSAPP_VERIFY_TOKEN }}
           WA_PNID: ${{ secrets.WHATSAPP_PHONE_NUMBER_ID }}
           WA_APP_SECRET: ${{ secrets.WHATSAPP_APP_SECRET }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          ADMIN_USER: ${{ secrets.ADMIN_USER }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
           command_timeout: 30m
-          envs: GROQ_KEY,OPENAI_KEY,GEMINI_KEY,AZ_ENDPOINT,AZ_KEY,AZ_DEPLOY,WA_TOKEN,WA_VERIFY,WA_PNID,WA_APP_SECRET
+          envs: GROQ_KEY,OPENAI_KEY,GEMINI_KEY,AZ_ENDPOINT,AZ_KEY,AZ_DEPLOY,WA_TOKEN,WA_VERIFY,WA_PNID,WA_APP_SECRET,ADMIN_PASSWORD,ADMIN_USER
           script: |
             set -euo pipefail
             cd "${{ secrets.DEPLOY_PATH }}"
@@ -93,6 +95,12 @@ jobs:
             [ -n "${WA_PNID:-}" ]       && echo "WHATSAPP_PHONE_NUMBER_ID=${WA_PNID}" >> "$ENVF"
             [ -n "${WA_APP_SECRET:-}" ] && echo "WHATSAPP_APP_SECRET=${WA_APP_SECRET}" >> "$ENVF"
             [ -n "${WA_VERIFY:-}" ] && echo ">> WhatsApp channel configured"
+
+            # --- Admin logs login (managed block) ---
+            sed -i '/^ADMIN_PASSWORD=/d;/^ADMIN_USER=/d' "$ENVF"
+            [ -n "${ADMIN_PASSWORD:-}" ] && echo "ADMIN_PASSWORD=${ADMIN_PASSWORD}" >> "$ENVF"
+            [ -n "${ADMIN_USER:-}" ]     && echo "ADMIN_USER=${ADMIN_USER}" >> "$ENVF"
+            [ -n "${ADMIN_PASSWORD:-}" ] && echo ">> Admin login configured"
 
             docker compose up -d --build --force-recreate backend
             docker compose up -d qdrant openwebui

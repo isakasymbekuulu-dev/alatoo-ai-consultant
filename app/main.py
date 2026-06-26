@@ -436,6 +436,19 @@ def admin_analytics(request: Request):
     return logging_store.analytics()
 
 
+@app.get("/admin/api/problems")
+def admin_problems(request: Request):
+    admin_guard(request)
+    return {"problems": logging_store.problems(300)}
+
+
+@app.post("/admin/api/flag")
+def admin_flag(request: Request, id: int = Query(...), flagged: int = Query(default=1)):
+    admin_guard(request)
+    logging_store.set_flag(id, bool(flagged))
+    return {"ok": True}
+
+
 @app.get("/admin/graph", response_class=HTMLResponse)
 def admin_graph_page(request: Request):
     if not _authed(request):

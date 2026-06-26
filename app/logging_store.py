@@ -34,6 +34,11 @@ def init() -> None:
                 """
             )
             c.execute("CREATE INDEX IF NOT EXISTS idx_session ON messages(session_id)")
+            mcols = [r[1] for r in c.execute("PRAGMA table_info(messages)").fetchall()]
+            if "problematic" not in mcols:
+                c.execute("ALTER TABLE messages ADD COLUMN problematic INTEGER DEFAULT 0")
+            if "flagged" not in mcols:
+                c.execute("ALTER TABLE messages ADD COLUMN flagged INTEGER DEFAULT 0")
             c.execute(
                 """
                 CREATE TABLE IF NOT EXISTS riasec_results (
@@ -81,12 +86,25 @@ def init() -> None:
         print(f"[log] init failed: {e}")
 
 
+_PROBLEM_MARKERS = ("приёмной комисси", "приемной комисси", "точной информации нет",
+                    "нет точной информац", "временно недоступен", "не могу ответить",
+                    "нет информации по", "обратитесь в приёмн", "обратитесь в приемн",
+                    "контекст не найден", "сервис ии временно")
+
+
+def _auto_problem(assistant_msg, sources) -> int:
+    """Problematic if the answer could not really help (deflected to admissions,
+    said it has no info, or the LLM-failure message)."""
+    a = (assistant_msg or "").lower()
+    return 1 if any(m in a for m in _PROBLEM_MARKERS) else 0
+
+
 def log_turn(session_id, source, user_msg, assistant_msg, sources, consent) -> None:
     try:
         with _lock, _connect() as c:
             c.execute(
-                "INSERT INTO messages (ts, session_id, source, user_msg, assistant_msg, sources, consent) "
-                "VALUES (?,?,?,?,?,?,?)",
+                "INSERT INTO messages (ts, session_id, source, user_msg, assistant_msg, sources, consent, problematic) "
+                "VALUES (?,?,?,?,?,?,?,?)",
                 (
                     time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                     session_id or "anon",
@@ -95,6 +113,7 @@ def log_turn(session_id, source, user_msg, assistant_msg, sources, consent) -> N
                     assistant_msg or "",
                     json.dumps(sources, ensure_ascii=False),
                     1 if consent else 0,
+                    _auto_problem(assistant_msg, sources),
                 ),
             )
     except Exception as e:
@@ -205,14 +224,14 @@ def session_messages(session_id: str) -> List[dict]:
     try:
         with _lock, _connect() as c:
             rows = c.execute(
-                "SELECT id, ts, source, user_msg, assistant_msg, sources, consent "
+                "SELECT id, ts, source, user_msg, assistant_msg, sources, consent, problematic, flagged "
                 "FROM messages WHERE session_id = ? ORDER BY id ASC",
                 (session_id,),
             ).fetchall()
     except Exception as e:
         print(f"[log] session_messages failed: {e}")
         return []
-    cols = ["id", "ts", "source", "user_msg", "assistant_msg", "sources", "consent"]
+    cols = ["id", "ts", "source", "user_msg", "assistant_msg", "sources", "consent", "problematic", "flagged"]
     return [dict(zip(cols, r)) for r in rows]
 
 
@@ -365,3 +384,30 @@ def clear_riasec(session_id: str) -> None:
             c.execute("DELETE FROM riasec_results WHERE session_id=?", (session_id,))
     except Exception:
         pass
+
+
+def set_flag(message_id, flagged) -> None:
+    """Manual flag toggle from the admin panel."""
+    try:
+        with _lock, _connect() as c:
+            c.execute("UPDATE messages SET flagged=? WHERE id=?",
+                      (1 if flagged else 0, int(message_id)))
+    except Exception:
+        pass
+
+
+def problems(limit: int = 300) -> List[dict]:
+    """All problematic OR manually-flagged messages across every chat (any channel)."""
+    try:
+        with _lock, _connect() as c:
+            rows = c.execute(
+                "SELECT id, ts, session_id, source, user_msg, assistant_msg, sources, problematic, flagged "
+                "FROM messages WHERE problematic=1 OR flagged=1 ORDER BY id DESC LIMIT ?",
+                (int(limit),),
+            ).fetchall()
+    except Exception as e:
+        print(f"[log] problems failed: {e}")
+        return []
+    cols = ["id", "ts", "session_id", "source", "user_msg", "assistant_msg",
+            "sources", "problematic", "flagged"]
+    return [dict(zip(cols, r)) for r in rows]

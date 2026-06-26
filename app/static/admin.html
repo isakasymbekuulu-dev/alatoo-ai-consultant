@@ -34,9 +34,21 @@ body{font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var
 .empty{flex:1;display:grid;place-items:center;color:var(--mut);font-size:14px}
 .ts{font-size:11px;color:#6f6f6f;text-align:center;margin:2px 0}
 @media(max-width:720px){.side{width:46%}}
+.tabs{display:flex;gap:6px;margin:0 12px 8px}
+.tab{flex:1;text-align:center;font-size:12.5px;border:1px solid var(--line);border-radius:8px;padding:7px;color:#cfcfcf;cursor:pointer}
+.tab.on{background:var(--surf2);color:#fff}
+.flag{font-size:11px;border:1px solid var(--line);background:none;color:var(--mut);border-radius:6px;padding:3px 9px;cursor:pointer;margin-top:8px}
+.flag.on{background:#5a2a2a;border-color:#7a3a3a;color:#ffcaca}
+.pitem{border:1px solid var(--line);border-radius:11px;padding:12px 14px;margin-bottom:11px;background:var(--surf)}
+.pitem .ph{font-size:11.5px;color:var(--mut);display:flex;gap:8px;align-items:center;margin-bottom:7px;flex-wrap:wrap}
+.pitem .pu{font-size:13.5px;color:#ddd;margin-bottom:6px}
+.pitem .pa{font-size:13.5px;color:#cfcfcf;line-height:1.6}
+.badge{font-size:10px;border-radius:5px;padding:1px 6px}
+.badge.auto{background:#3a2f1a;color:#e6c98a}.badge.man{background:#5a2a2a;color:#ffcaca}
 </style></head><body>
 <aside class="side">
   <div class="sh"><h1>Журнал диалогов</h1><div class="st" id="stat">загрузка…</div></div>
+  <div class="tabs"><div class="tab on" id="tabChats">Диалоги</div><div class="tab" id="tabProblems">Проблемные ⚑</div></div>
   <div class="search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>
     <input id="q" placeholder="Поиск по чатам…"/></div>
   <div class="list" id="list"></div>
@@ -84,11 +96,39 @@ async function open(id,title){
     let srcs='';try{srcs=(JSON.parse(m.sources||'[]')).map(x=>x.source).filter(Boolean).join(', ');}catch(e){}
     return `<div class="ts">${fmt(m.ts)}</div>
       <div class="row me"><div class="av me">Аб</div><div class="bub me">${esc(m.user_msg)}</div></div>
-      <div class="row"><div class="av ai">AI</div><div class="bub ai">${md(m.assistant_msg)}${srcs?`<div class="src">Источники: ${esc(srcs)}</div>`:''}</div></div>`;
+      <div class="row"><div class="av ai">AI</div><div class="bub ai">${md(m.assistant_msg)}${srcs?`<div class="src">Источники: ${esc(srcs)}</div>`:''}<button class="flag ${m.flagged?'on':''}" data-id="${m.id}">${m.flagged?'⚑ помечено':'⚑ пометить'}</button></div></div>`;
   }).join('')||'<div class="empty">пусто</div>';
 }
 listEl.addEventListener('click',e=>{const c=e.target.closest('.chat');if(c){const s=all.find(x=>x.session_id===c.dataset.id);open(c.dataset.id,s?.title||'Диалог');}});
 qEl.addEventListener('input',render);
+const tabChats=document.getElementById('tabChats'),tabProblems=document.getElementById('tabProblems');
+let mode='chats';
+function setTab(m){mode=m;tabChats.classList.toggle('on',m==='chats');tabProblems.classList.toggle('on',m==='problems');
+  if(m==='problems'){loadProblems();}else{mh.innerHTML='<span>Выберите диалог</span>';colEl.innerHTML='<div class="empty">← выберите диалог слева</div>';render();}}
+tabChats.onclick=()=>setTab('chats');
+tabProblems.onclick=()=>setTab('problems');
+
+async function flagMsg(id,val,btn){
+  try{await fetch('/admin/api/flag?token='+encodeURIComponent(token)+'&id='+id+'&flagged='+(val?1:0),{method:'POST'});}catch(e){}
+  if(btn){btn.classList.toggle('on',val);btn.textContent=val?'⚑ помечено':'⚑ пометить';}
+}
+async function loadProblems(){
+  mh.innerHTML='<span>Проблемные сообщения</span> <span class="sub">авто + помеченные, по всем чатам</span>';
+  const r=await fetch('/admin/api/problems?token='+encodeURIComponent(token));
+  if(!r.ok){colEl.innerHTML='<div class="empty">нет доступа</div>';return;}
+  const d=await r.json();const ps=d.problems||[];
+  if(!ps.length){colEl.innerHTML='<div class="empty">проблемных сообщений нет</div>';return;}
+  colEl.innerHTML=ps.map(m=>{
+    const tags=(m.problematic?'<span class="badge auto">авто</span>':'')+(m.flagged?'<span class="badge man">помечено</span>':'');
+    return `<div class="pitem"><div class="ph"><span class="tag">${esc(m.source)}</span>${tags}<span>${fmt(m.ts)}</span><span>· ${esc(m.session_id)}</span></div>
+      <div class="pu"><b>Вопрос:</b> ${esc(m.user_msg)}</div>
+      <div class="pa"><b>Ответ:</b> ${md(m.assistant_msg)}</div>
+      <button class="flag ${m.flagged?'on':''}" data-id="${m.id}">${m.flagged?'⚑ снять пометку':'⚑ пометить'}</button></div>`;
+  }).join('');
+}
+colEl.addEventListener('click',e=>{const b=e.target.closest('.flag[data-id]');if(b){const id=b.dataset.id;const now=!b.classList.contains('on');flagMsg(id,now,b);}});
+
+
 load();
 </script>
 </body></html>

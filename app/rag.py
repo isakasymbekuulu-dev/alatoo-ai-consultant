@@ -125,6 +125,23 @@ def build_context(chunks: List[dict]) -> str:
     return "\n\n---\n\n".join(blocks)
 
 
+def _approx_tokens(text: str) -> int:
+    # rough token estimate (Cyrillic-heavy text ~3 chars/token)
+    return len(text or "") // 3 + 2
+
+
+def trim_history(msgs: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    """Keep the most recent turns that fit the token budget (settings.max_history_tokens),
+    with a hard cap on count. Limits the conversation context window."""
+    out, total = [], 0
+    for m in reversed(msgs[-settings.max_history_messages:]):
+        t = _approx_tokens(m.get("content", ""))
+        if out and total + t > settings.max_history_tokens:
+            break
+        out.append(m); total += t
+    return list(reversed(out))
+
+
 def build_messages(
     history: List[Dict[str, str]],
     riasec_summary: Optional[str] = None,
@@ -141,7 +158,7 @@ def build_messages(
     chunks = retrieve(sq)
     context = build_context(chunks) if chunks else "(контекст не найден)"
 
-    convo = [m for m in history if m.get("role") in ("user", "assistant")][-settings.max_history_messages:]
+    convo = trim_history([m for m in history if m.get("role") in ("user", "assistant")])
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     messages.append({"role": "system", "content": ADMISSIONS_CONTACT})
@@ -155,8 +172,6 @@ def build_messages(
         "content": "КОНТЕКСТ (выдержки из базы знаний вуза):\n\n" + context,
     })
     messages.extend(convo)
-    # Language directive near the end so it dominates the (Russian) context.
-    messages.append({"role": "system", "content": answer_directive(lang)})
 
     # Source reminder LAST, with the concrete links available for THIS answer, so
     # the (small) model reliably ends with clickable "Источники:" instead of
@@ -175,6 +190,7 @@ def build_messages(
             + listing +
             "\nЕсли ты использовал сведения из них, ОБЯЗАТЕЛЬНО заверши ответ строкой "
             "«Источники:» и перечисли соответствующие ссылки в формате [название](URL). "
-            "Не указывай источники, сведения из которых не использовал; URL не выдумывай. "
-            "Пиши на языке пользователя.")})
+            "Не указывай источники, сведения из которых не использовал; URL не выдумывай.")})
+    # Language directive LAST so it dominates (gpt-4o-mini otherwise drifts to RU / drops Kyrgyz).
+    messages.append({"role": "system", "content": answer_directive(lang)})
     return messages, chunks

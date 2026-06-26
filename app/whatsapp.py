@@ -215,7 +215,7 @@ def push_riasec_result(to: str, result: dict, lang: str = "ru", name=None) -> No
 def _answer_for(text: str, session_id: str) -> str:
     history = [{"role": "user", "content": text}]
     messages, chunks, intent, trace = run_graph(history, riasec_summary=_riasec_summary(session_id))
-    messages.append({"role": "system", "content": WA_DIRECTIVE})   # WhatsApp-channel role
+    messages.insert(-1, {"role": "system", "content": WA_DIRECTIVE})   # WhatsApp role, before the final language directive
     answer = _wa_format(chat(messages), session_id)
     try:
         sources = [{"title": c.get("title", ""), "source": c.get("source", ""),

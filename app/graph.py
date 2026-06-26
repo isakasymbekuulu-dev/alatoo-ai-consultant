@@ -16,7 +16,7 @@ import re
 
 from langgraph.graph import StateGraph, START, END
 
-from app.rag import build_messages, SYSTEM_PROMPT
+from app.rag import build_messages, SYSTEM_PROMPT, trim_history
 from app.lang import answer_directive, detect_lang
 from app.config import settings
 
@@ -82,7 +82,7 @@ def riasec_node(state: GState) -> GState:
 
 
 def general_node(state: GState) -> GState:
-    convo = [m for m in (state.get("history") or []) if m.get("role") in ("user", "assistant")][-settings.max_history_messages:]
+    convo = trim_history([m for m in (state.get("history") or []) if m.get("role") in ("user", "assistant")])
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     if state.get("riasec_summary"):
         messages.append({

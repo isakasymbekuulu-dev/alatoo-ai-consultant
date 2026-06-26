@@ -141,7 +141,7 @@ def build_messages(
     chunks = retrieve(sq)
     context = build_context(chunks) if chunks else "(контекст не найден)"
 
-    convo = [m for m in history if m.get("role") in ("user", "assistant")][-6:]
+    convo = [m for m in history if m.get("role") in ("user", "assistant")][-settings.max_history_messages:]
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     messages.append({"role": "system", "content": ADMISSIONS_CONTACT})

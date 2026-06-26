@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     top_k: int = 6
     score_threshold: float = 0.3
     max_context_chars: int = 8000
+    max_history_messages: int = 6   # сколько последних реплик помнит бот (3 пары вопрос-ответ); ограничивает контекстное окно
 
     # Backend
     backend_api_key: str = ""

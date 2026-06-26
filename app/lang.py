@@ -15,10 +15,21 @@ log = logging.getLogger("alatoo.lang")
 # Kyrgyz often uses plain Cyrillic, so letter-only detection is not enough.
 # Stems (no trailing word-boundary) so suffixed forms also match, e.g.
 # "женилдет" catches "женилдетүүлөр" / "женилдетуулор".
+# Full distinctive Kyrgyz words (both word boundaries → no false hits on Russian
+# words that merely start with these letters, e.g. "булка"/"болото"/"сено").
 _KY_WORDS = re.compile(
-    r"\b(барбы|канча|кандай|кайсы|кайда|болобу|болот|керек|үчүн|жөнүндө|"
-    r"эмне|окуу акысы|акысы|жеңилдик|женилдик|жеңилдет|женилдет|"
-    r"тапшыр|кабыл алуу|жатакана|менин|сиздин)",
+    r"\b(кандай|канча|кайсы|кайда|кайдан|качан|эмне|эмнеге|болобу|болбойт|болот|"
+    r"керек|керекпи|үчүн|жөнүндө|тууралуу|жана|жок|ооба|рахмат|мүмкүн|"
+    r"силер|сиздер|менин|сиздин|биздин|кыргызча|кыргыз|менен|аркылуу|экен|ушул|"
+    r"абдан|аябай|жакшы|жаман|баасы|акча|акысы|жатакана|барбы|келеби|бекен|"
+    r"саламатсызбы|саламатсыз|кантип|кантем|сурайм|сурагым|каалайм|билем|билгим|"
+    r"келет|жатам|жатат|окуу акысы)\b",
+    re.I,
+)
+# Kyrgyz stems (leading boundary only → catch suffixed forms; chosen so they are
+# not prefixes of common Russian words).
+_KY_STEMS = re.compile(
+    r"\b(женилдет|жеңилдет|женилдик|жеңилдик|тапшыр|кабыл алуу|окуй|окуу|сура|каала)",
     re.I,
 )
 _KY_LETTERS = re.compile(r"[ңүөҢҮӨ]")
@@ -34,7 +45,7 @@ def detect_lang(text: str) -> str:
     sample = s[:600]
     cyr = len(_CYR.findall(sample))
     lat = len(_LAT.findall(sample))
-    if _KY_LETTERS.search(sample) or _KY_WORDS.search(sample):
+    if _KY_LETTERS.search(sample) or _KY_WORDS.search(sample) or _KY_STEMS.search(sample):
         return "ky"
     if cyr >= lat:
         return "ru"

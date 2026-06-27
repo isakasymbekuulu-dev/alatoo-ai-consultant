@@ -295,6 +295,28 @@ def problem_sessions(limit: int = 300) -> List[dict]:
     return [dict(zip(cols, r)) for r in rows]
 
 
+def recent_history(session_id: str, limit: int = 6):
+    """Last `limit` turns of a conversation as chat messages (oldest first), so a
+    stateless channel (WhatsApp) gets short-term memory and the bot stops
+    re-greeting / can follow up. Includes operator replies as assistant turns."""
+    try:
+        with _lock, _connect() as c:
+            rows = c.execute(
+                "SELECT user_msg, assistant_msg FROM messages WHERE session_id=? "
+                "ORDER BY id DESC LIMIT ?",
+                (session_id, int(limit)),
+            ).fetchall()
+    except Exception:
+        return []
+    out = []
+    for user_msg, assistant_msg in reversed(rows):
+        if user_msg:
+            out.append({"role": "user", "content": user_msg})
+        if assistant_msg:
+            out.append({"role": "assistant", "content": assistant_msg})
+    return out
+
+
 def stats() -> dict:
     try:
         with _lock, _connect() as c:

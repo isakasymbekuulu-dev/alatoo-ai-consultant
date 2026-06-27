@@ -62,7 +62,7 @@ const token=new URLSearchParams(location.search).get('token')||'';
 const qs=t=>'?token='+encodeURIComponent(token)+t;
 const listEl=document.getElementById('list'),colEl=document.getElementById('col'),
       mh=document.getElementById('mh'),foot=document.getElementById('foot'),statEl=document.getElementById('stat');
-let queue=[],cur=null,curConv=null;
+let queue=[],cur=null,curConv=null,lastMode=null;
 function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function fmt(ts){return (ts||'').replace('T',' ').replace('Z','');}
 const PRI={2:['p2','🔴 срочно'],1:['p1','🟠 важно'],0:['p0','🟡 обычный']};
@@ -98,7 +98,20 @@ async function openConv(id){
   cur=id;renderQueue();
   let d;try{d=await jget('/admin/api/operator/conversation'+qs('&id='+encodeURIComponent(id)));}catch(e){return;}
   curConv=d.conversation||{session_id:id};
+  lastMode=curConv.mode==='human'?'human':'bot';
   renderHeader();renderMessages(d.messages||[]);renderFoot();
+}
+
+// Lightweight poll: refresh messages WITHOUT rebuilding the composer (so the
+// operator's typing/focus is never wiped). Header+composer rebuild only when the
+// bot/human mode actually changes.
+async function refreshOpen(){
+  if(!cur) return;
+  let d;try{d=await jget('/admin/api/operator/conversation'+qs('&id='+encodeURIComponent(cur)));}catch(e){return;}
+  curConv=d.conversation||curConv;
+  const mode=(curConv&&curConv.mode==='human')?'human':'bot';
+  renderMessages(d.messages||[]);
+  if(mode!==lastMode){lastMode=mode;renderHeader();renderFoot();}
 }
 function renderHeader(){
   const c=curConv||{};const human=c.mode==='human';
@@ -126,8 +139,10 @@ function renderMessages(msgs){
     if(m.user_msg) html+=`<div class="ts">${fmt(m.ts)}</div>`+bubble('me','Абитуриент','me',m.user_msg);
     if(m.assistant_msg){const op=(m.source||'').endsWith(':operator');html+=bubble('',op?'Оператор':'Бот',op?'op':'ai',m.assistant_msg);}
   }
+  const sc=colEl.parentElement;
+  const atBottom=sc.scrollHeight-sc.scrollTop-sc.clientHeight<90;
   colEl.innerHTML=html;
-  colEl.parentElement.scrollTop=colEl.parentElement.scrollHeight;
+  if(atBottom) sc.scrollTop=sc.scrollHeight;
 }
 function renderFoot(){
   const human=(curConv||{}).mode==='human';
@@ -146,6 +161,6 @@ function renderFoot(){
 
 loadQueue();
 setInterval(loadQueue,5000);
-setInterval(()=>{if(cur)openConv(cur);},6000);
+setInterval(refreshOpen,6000);
 </script>
 </body></html>

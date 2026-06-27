@@ -27,7 +27,7 @@ from fastapi import APIRouter, BackgroundTasks, Request, Query
 from fastapi.responses import PlainTextResponse, JSONResponse
 
 from app.config import settings
-from app import logging_store, riasec, persona, stt, channels, handoff
+from app import logging_store, riasec, persona, stt, channels, handoff, notify
 from app.graph import run_graph
 from app.llm import chat
 
@@ -64,6 +64,24 @@ def _is_retake(t: str) -> bool:
              "ещёраз", "ещераз", "по новой", "по-новой", "again", "retake", "повтор")
     test = ("тест", "test", "профориент", "пройти")
     return any(a in t for a in again) and any(x in t for x in test)
+
+
+_HUMAN_REPLY = (
+    "Передаю Ваш вопрос сотруднику приёмной комиссии — пожалуйста, ожидайте, с Вами свяжутся. "
+    "Вы также можете связаться напрямую: +996 555 820 000."
+)
+
+
+def _wants_human(t: str) -> bool:
+    """Explicit request to talk to a real person / operator."""
+    call = ("позов", "позвать", "соедин", "переключ", "свяж", "нужен", "нужна", "дай", "дайте",
+            "хочу", "give", "call", "connect", "want", "need", "talk")
+    human = ("оператор", "сотрудник", "человек", "менеджер", "manager", "operator",
+             "human", "agent", "живой", "живого", "живым", "живому")
+    if any(h in t for h in human) and any(c in t for c in call):
+        return True
+    return t.strip() in ("оператор", "оператора", "менеджер", "менеджера",
+                         "человек", "человека", "сотрудник", "сотрудника", "operator", "human")
 
 
 def _is_reset(t: str) -> bool:
@@ -244,7 +262,10 @@ def push_riasec_result(to: str, result: dict, lang: str = "ru", name=None) -> No
 
 
 def _answer_for(text: str, session_id: str) -> str:
-    history = [{"role": "user", "content": text}]
+    # WhatsApp is stateless per webhook call -> rebuild short-term memory from the
+    # logs so the bot keeps context and stops re-greeting on every message.
+    history = logging_store.recent_history(session_id, limit=6)
+    history.append({"role": "user", "content": text})
     messages, chunks, intent, trace = run_graph(history, riasec_summary=_riasec_summary(session_id))
     messages.insert(-1, {"role": "system", "content": persona.social_directive("whatsapp")})
     messages.insert(-1, {"role": "system", "content": WA_COMMANDS})   # before the final language directive
@@ -305,6 +326,14 @@ def _process(value: dict) -> None:
         elif _is_reset(low):
             logging_store.clear_riasec(session_id)
             reply = _RESET_REPLY
+        elif _wants_human(low):
+            is_new = handoff.flag(session_id, reason="Пользователь просит соединить с оператором",
+                                  priority=1, auto=True, channel="whatsapp", recipient=sender)
+            if is_new:
+                notify.notify_staff(notify.escalation_message(
+                    session_id, "whatsapp", "Пользователь просит оператора", 1))
+            logging_store.log_turn(session_id, "whatsapp", text, _HUMAN_REPLY, [], False)
+            reply = _HUMAN_REPLY
         else:
             reply = _answer_for(text, session_id)
         _send_text(sender, reply)

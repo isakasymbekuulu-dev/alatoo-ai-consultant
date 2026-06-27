@@ -262,9 +262,10 @@ def push_riasec_result(to: str, result: dict, lang: str = "ru", name=None) -> No
 
 
 def _answer_for(text: str, session_id: str) -> str:
-    # WhatsApp is stateless per webhook call -> rebuild short-term memory from the
-    # logs so the bot keeps context and stops re-greeting on every message.
-    history = logging_store.recent_history(session_id, limit=6)
+    # WhatsApp is stateless per webhook call -> rebuild memory from the logs. We pull
+    # a generous slice; the token-based window (rag.trim_history / max_history_tokens)
+    # then trims it to the same budget the web chat uses.
+    history = logging_store.recent_history(session_id, limit=settings.max_history_messages)
     history.append({"role": "user", "content": text})
     messages, chunks, intent, trace = run_graph(history, riasec_summary=_riasec_summary(session_id))
     messages.insert(-1, {"role": "system", "content": persona.social_directive("whatsapp")})

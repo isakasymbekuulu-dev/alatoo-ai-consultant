@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     top_k: int = 6
     score_threshold: float = 0.3
     max_context_chars: int = 8000
-    max_history_tokens: int = 4000  # бюджет окна истории в ~токенах (последние реплики, влезающие в бюджет)
+    max_history_tokens: int = 3000  # бюджет окна истории в ~токенах (среднее окно; последние реплики, влезающие в бюджет)
     max_history_messages: int = 40  # жёсткий потолок числа реплик (страховка)
 
     # Backend
@@ -105,6 +105,9 @@ class Settings(BaseSettings):
     staff_telegram_bot_token: str = ""
     staff_telegram_chat_id: str = ""
     staff_notify_webhook: str = ""        # generic fallback: POST {"text": ...}
+    # If an operator takes a chat over but goes idle this long, the bot resumes
+    # automatically (so a conversation never gets stuck silent). 0 disables.
+    handoff_timeout_min: int = 30
 
 
 settings = Settings()

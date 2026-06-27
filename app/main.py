@@ -502,6 +502,8 @@ def admin_op_send(request: Request, body: OperatorSend):
     conv = handoff.get(sid)
     if not conv or conv.get("mode") != "human":
         handoff.take_over(sid, "operator")   # operator reply implies takeover
+    else:
+        handoff.touch_operator(sid)          # refresh idle timer on each reply
     ok = channels.send_to_session(sid, text)
     logging_store.log_turn(sid, channels.channel_of(sid) + ":operator", "", text, [], False)
     return {"ok": ok}

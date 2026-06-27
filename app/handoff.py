@@ -9,6 +9,7 @@ Channel-agnostic: keyed by session_id and the channel/recipient stored on the
 row, so the same operator console drives WhatsApp now and Telegram/Instagram
 later without changes here.
 """
+import calendar
 import os
 import sqlite3
 import threading
@@ -46,18 +47,32 @@ def init() -> None:
                     auto        INTEGER DEFAULT 0,      -- 1 auto-raised, 0 manual
                     reason      TEXT,
                     operator    TEXT,
+                    operator_ts TEXT,
                     created_ts  TEXT,
                     updated_ts  TEXT
                 )
                 """
             )
             c.execute("CREATE INDEX IF NOT EXISTS idx_conv_queue ON conversations(escalation, mode)")
+            cols = [r[1] for r in c.execute("PRAGMA table_info(conversations)").fetchall()]
+            if "operator_ts" not in cols:
+                c.execute("ALTER TABLE conversations ADD COLUMN operator_ts TEXT")
     except Exception as e:
         print(f"[handoff] init failed: {e}")
 
 
 _COLS = ["session_id", "channel", "recipient", "title", "mode", "escalation",
-         "priority", "handled", "auto", "reason", "operator", "created_ts", "updated_ts"]
+         "priority", "handled", "auto", "reason", "operator", "operator_ts",
+         "created_ts", "updated_ts"]
+
+
+def _age_seconds(ts: str):
+    if not ts:
+        return None
+    try:
+        return time.time() - calendar.timegm(time.strptime(ts, "%Y-%m-%dT%H:%M:%SZ"))
+    except Exception:
+        return None
 
 
 def _row(r) -> dict:
@@ -100,16 +115,38 @@ def ensure(session_id: str, channel: str = None, recipient: str = None, title: s
 
 
 def is_bot_active(session_id: str) -> bool:
-    """True unless a human operator has taken the conversation over."""
+    """True unless a human operator is actively handling the conversation.
+    If the operator took it over but has been idle past handoff_timeout_min, the
+    bot resumes automatically so a chat is never stuck silent."""
     row = get(session_id)
-    return not (row and row.get("mode") == "human")
+    if not (row and row.get("mode") == "human"):
+        return True
+    timeout = int(getattr(settings, "handoff_timeout_min", 0) or 0)
+    if timeout > 0:
+        age = _age_seconds(row.get("operator_ts") or row.get("updated_ts"))
+        if age is not None and age > timeout * 60:
+            release_to_bot(session_id)   # operator went idle -> hand back to bot
+            return True
+    return False
 
 
 def take_over(session_id: str, operator: str = "") -> None:
     try:
         with _lock, _connect() as c:
-            c.execute("UPDATE conversations SET mode='human', operator=?, handled=0, updated_ts=? "
-                      "WHERE session_id=?", (operator or "", _now(), session_id))
+            c.execute("UPDATE conversations SET mode='human', operator=?, handled=0, "
+                      "operator_ts=?, updated_ts=? WHERE session_id=?",
+                      (operator or "", _now(), _now(), session_id))
+    except Exception:
+        pass
+
+
+def touch_operator(session_id: str) -> None:
+    """Refresh the operator-activity timestamp (called on each operator reply) so
+    the auto-handback timer only fires after the operator is truly idle."""
+    try:
+        with _lock, _connect() as c:
+            c.execute("UPDATE conversations SET operator_ts=?, updated_ts=? WHERE session_id=?",
+                      (_now(), _now(), session_id))
     except Exception:
         pass
 

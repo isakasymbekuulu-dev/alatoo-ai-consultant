@@ -39,6 +39,8 @@ def init() -> None:
                 c.execute("ALTER TABLE messages ADD COLUMN problematic INTEGER DEFAULT 0")
             if "flagged" not in mcols:
                 c.execute("ALTER TABLE messages ADD COLUMN flagged INTEGER DEFAULT 0")
+            if "problem_reason" not in mcols:
+                c.execute("ALTER TABLE messages ADD COLUMN problem_reason TEXT")
             c.execute(
                 """
                 CREATE TABLE IF NOT EXISTS riasec_results (
@@ -109,10 +111,12 @@ def _auto_problem(user_msg, assistant_msg, sources) -> int:
     return 1 if any(m in u for m in _COMPLAINT_MARKERS) else 0
 
 
-def log_turn(session_id, source, user_msg, assistant_msg, sources, consent) -> None:
+def log_turn(session_id, source, user_msg, assistant_msg, sources, consent):
+    """Insert one turn. Returns the new row id (or None on failure) so the caller
+    can hand it to the async LLM problem-reviewer (app/feedback.py)."""
     try:
         with _lock, _connect() as c:
-            c.execute(
+            cur = c.execute(
                 "INSERT INTO messages (ts, session_id, source, user_msg, assistant_msg, sources, consent, problematic) "
                 "VALUES (?,?,?,?,?,?,?,?)",
                 (
@@ -126,8 +130,10 @@ def log_turn(session_id, source, user_msg, assistant_msg, sources, consent) -> N
                     _auto_problem(user_msg, assistant_msg, sources),
                 ),
             )
+            return cur.lastrowid
     except Exception as e:
         print(f"[log] write failed: {e}")
+        return None
 
 
 def save_riasec(result_id, session_id, lang, code, scores, recs, consent, name=None) -> None:
@@ -234,14 +240,58 @@ def session_messages(session_id: str) -> List[dict]:
     try:
         with _lock, _connect() as c:
             rows = c.execute(
-                "SELECT id, ts, source, user_msg, assistant_msg, sources, consent, problematic, flagged "
+                "SELECT id, ts, source, user_msg, assistant_msg, sources, consent, problematic, flagged, problem_reason "
                 "FROM messages WHERE session_id = ? ORDER BY id ASC",
                 (session_id,),
             ).fetchall()
     except Exception as e:
         print(f"[log] session_messages failed: {e}")
         return []
-    cols = ["id", "ts", "source", "user_msg", "assistant_msg", "sources", "consent", "problematic", "flagged"]
+    cols = ["id", "ts", "source", "user_msg", "assistant_msg", "sources", "consent", "problematic", "flagged", "problem_reason"]
+    return [dict(zip(cols, r)) for r in rows]
+
+
+def session_problems(session_id: str) -> List[dict]:
+    """Only the problematic / flagged messages of one conversation (problems view)."""
+    try:
+        with _lock, _connect() as c:
+            rows = c.execute(
+                "SELECT id, ts, source, user_msg, assistant_msg, sources, consent, problematic, flagged, problem_reason "
+                "FROM messages WHERE session_id = ? AND (problematic=1 OR flagged=1) ORDER BY id ASC",
+                (session_id,),
+            ).fetchall()
+    except Exception as e:
+        print(f"[log] session_problems failed: {e}")
+        return []
+    cols = ["id", "ts", "source", "user_msg", "assistant_msg", "sources", "consent", "problematic", "flagged", "problem_reason"]
+    return [dict(zip(cols, r)) for r in rows]
+
+
+def problem_sessions(limit: int = 300) -> List[dict]:
+    """One row per conversation that has at least one problematic / flagged message,
+    with the count of such messages. Powers the sidebar of the «Проблемные» tab."""
+    try:
+        with _lock, _connect() as c:
+            rows = c.execute(
+                """
+                SELECT m.session_id, m.source,
+                  SUM(CASE WHEN m.problematic=1 OR m.flagged=1 THEN 1 ELSE 0 END) AS n_problems,
+                  COUNT(*) AS n,
+                  MAX(m.ts) AS last_ts,
+                  (SELECT user_msg FROM messages m2 WHERE m2.session_id = m.session_id
+                     ORDER BY m2.id ASC LIMIT 1) AS title
+                FROM messages m
+                GROUP BY m.session_id
+                HAVING n_problems > 0
+                ORDER BY MAX(m.id) DESC
+                LIMIT ?
+                """,
+                (int(limit),),
+            ).fetchall()
+    except Exception as e:
+        print(f"[log] problem_sessions failed: {e}")
+        return []
+    cols = ["session_id", "source", "n_problems", "n", "last_ts", "title"]
     return [dict(zip(cols, r)) for r in rows]
 
 
@@ -406,12 +456,41 @@ def set_flag(message_id, flagged) -> None:
         pass
 
 
+def mark_problematic(message_id, reason: str = "") -> None:
+    """Mark a turn problematic (used by the async LLM reviewer in app/feedback.py).
+    Keeps any existing reason if a new one is not supplied."""
+    try:
+        with _lock, _connect() as c:
+            c.execute(
+                "UPDATE messages SET problematic=1, "
+                "problem_reason=COALESCE(NULLIF(?, ''), problem_reason) WHERE id=?",
+                ((reason or "").strip(), int(message_id)),
+            )
+    except Exception:
+        pass
+
+
+def prev_turn(session_id: str, before_id):
+    """(id, assistant_msg) of the turn just before `before_id` in the same session.
+    Used to back-flag the answer a user is complaining about."""
+    try:
+        with _lock, _connect() as c:
+            row = c.execute(
+                "SELECT id, assistant_msg FROM messages "
+                "WHERE session_id=? AND id<? ORDER BY id DESC LIMIT 1",
+                (session_id, int(before_id)),
+            ).fetchone()
+        return (row[0], row[1]) if row else (None, None)
+    except Exception:
+        return (None, None)
+
+
 def problems(limit: int = 300) -> List[dict]:
     """All problematic OR manually-flagged messages across every chat (any channel)."""
     try:
         with _lock, _connect() as c:
             rows = c.execute(
-                "SELECT id, ts, session_id, source, user_msg, assistant_msg, sources, problematic, flagged "
+                "SELECT id, ts, session_id, source, user_msg, assistant_msg, sources, problematic, flagged, problem_reason "
                 "FROM messages WHERE problematic=1 OR flagged=1 ORDER BY id DESC LIMIT ?",
                 (int(limit),),
             ).fetchall()
@@ -419,5 +498,5 @@ def problems(limit: int = 300) -> List[dict]:
         print(f"[log] problems failed: {e}")
         return []
     cols = ["id", "ts", "session_id", "source", "user_msg", "assistant_msg",
-            "sources", "problematic", "flagged"]
+            "sources", "problematic", "flagged", "problem_reason"]
     return [dict(zip(cols, r)) for r in rows]

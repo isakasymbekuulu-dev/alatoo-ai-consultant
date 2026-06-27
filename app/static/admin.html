@@ -17,8 +17,9 @@ body{font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var
 .chat{padding:10px 12px;border-radius:9px;cursor:pointer;margin-bottom:2px}
 .chat:hover{background:var(--surf)}.chat.on{background:var(--surf2)}
 .chat .t{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.chat .m{font-size:11.5px;color:var(--mut);margin-top:3px;display:flex;gap:8px;align-items:center}
+.chat .m{font-size:11.5px;color:var(--mut);margin-top:3px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .tag{font-size:10.5px;border:1px solid var(--line);border-radius:5px;padding:1px 6px;color:#bdbdbd}
+.pcount{font-size:10.5px;border-radius:5px;padding:1px 6px;background:#5a2a2a;color:#ffcaca}
 .main{flex:1;display:flex;flex-direction:column;min-width:0}
 .mh{padding:14px 20px;border-bottom:1px solid var(--line);font-size:14px;font-weight:500;display:flex;gap:10px;align-items:center}
 .mh .sub{font-size:12px;color:var(--mut);font-weight:400}
@@ -29,8 +30,10 @@ body{font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var
 .av.ai{background:#ececec;color:#111}.av.me{background:#3a3a3a;color:#ddd}
 .bub{max-width:80%;font-size:14.5px;line-height:1.65;border-radius:13px;padding:11px 14px}
 .bub.me{background:var(--surf2)}.bub.ai{background:var(--surf);border:1px solid var(--line)}
+.bub.ai.prob{border-color:#7a3a3a;background:#241b1b}
 .bub.ai h4{font-size:14px;font-weight:600;margin:11px 0 4px}.bub.ai ul{margin:4px 0;padding-left:19px}.bub.ai li{margin:3px 0}.bub.ai strong{color:#fff}
 .src{margin-top:9px;font-size:11.5px;color:var(--mut);border-top:1px solid var(--line);padding-top:7px}
+.reason{margin-top:9px;font-size:12px;color:#ffcaca;background:#3a2020;border:1px solid #5a2a2a;border-radius:7px;padding:6px 9px}
 .empty{flex:1;display:grid;place-items:center;color:var(--mut);font-size:14px}
 .ts{font-size:11px;color:#6f6f6f;text-align:center;margin:2px 0}
 @media(max-width:720px){.side{width:46%}}
@@ -39,12 +42,6 @@ body{font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var
 .tab.on{background:var(--surf2);color:#fff}
 .flag{font-size:11px;border:1px solid var(--line);background:none;color:var(--mut);border-radius:6px;padding:3px 9px;cursor:pointer;margin-top:8px}
 .flag.on{background:#5a2a2a;border-color:#7a3a3a;color:#ffcaca}
-.pitem{border:1px solid var(--line);border-radius:11px;padding:12px 14px;margin-bottom:11px;background:var(--surf)}
-.pitem .ph{font-size:11.5px;color:var(--mut);display:flex;gap:8px;align-items:center;margin-bottom:7px;flex-wrap:wrap}
-.pitem .pu{font-size:13.5px;color:#ddd;margin-bottom:6px}
-.pitem .pa{font-size:13.5px;color:#cfcfcf;line-height:1.6}
-.badge{font-size:10px;border-radius:5px;padding:1px 6px}
-.badge.auto{background:#3a2f1a;color:#e6c98a}.badge.man{background:#5a2a2a;color:#ffcaca}
 </style></head><body>
 <aside class="side">
   <div class="sh"><h1>Журнал диалогов</h1><div class="st" id="stat">загрузка…</div></div>
@@ -61,7 +58,8 @@ body{font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var
 const token=new URLSearchParams(location.search).get('token')||'';
 const listEl=document.getElementById('list'),colEl=document.getElementById('col'),
       mh=document.getElementById('mh'),statEl=document.getElementById('stat'),qEl=document.getElementById('q');
-let all=[],cur=null;
+const tabChats=document.getElementById('tabChats'),tabProblems=document.getElementById('tabProblems');
+let all=[],probs=[],probsLoaded=false,cur=null,mode='chats';
 function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function md(t){let s=esc(t);
   s=s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
@@ -72,6 +70,7 @@ function md(t){let s=esc(t);
     else{c();o.push('<p>'+x+'</p>');}}
   c();return o.join('');}
 function fmt(ts){return (ts||'').replace('T',' ').replace('Z','');}
+
 async function load(){
   const r=await fetch('/admin/api/sessions?token='+encodeURIComponent(token));
   if(!r.ok){statEl.textContent='нет доступа (проверьте токен)';return;}
@@ -79,55 +78,64 @@ async function load(){
   statEl.textContent=`${d.total_sessions} диалогов · ${d.total_messages} сообщений`;
   render();
 }
+async function loadProblems(){
+  const r=await fetch('/admin/api/problem_sessions?token='+encodeURIComponent(token));
+  if(r.ok){const d=await r.json();probs=d.sessions||[];probsLoaded=true;}
+}
 function render(){
   const f=qEl.value.trim().toLowerCase();
-  const items=all.filter(s=>!f||(s.title||'').toLowerCase().includes(f));
-  listEl.innerHTML=items.map(s=>`<div class="chat" data-id="${esc(s.session_id)}">
-    <div class="t">${esc(s.title||'(без вопроса)')}</div>
-    <div class="m"><span class="tag">${esc(s.source)}</span><span>${fmt(s.last_ts)}</span><span>· ${s.n} реплик</span></div></div>`).join('')
-    || '<div style="padding:14px;color:#7c7c7c;font-size:13px">Ничего не найдено</div>';
+  const data=mode==='problems'?probs:all;
+  const items=data.filter(s=>!f||(s.title||'').toLowerCase().includes(f));
+  if(!items.length){
+    listEl.innerHTML='<div style="padding:14px;color:#7c7c7c;font-size:13px">'
+      +(mode==='problems'?'Проблемных диалогов нет':'Ничего не найдено')+'</div>';
+    return;
+  }
+  listEl.innerHTML=items.map(s=>{
+    const meta=mode==='problems'
+      ? `<span class="tag">${esc(s.source)}</span><span class="pcount">⚑ ${s.n_problems}</span><span>${fmt(s.last_ts)}</span>`
+      : `<span class="tag">${esc(s.source)}</span><span>${fmt(s.last_ts)}</span><span>· ${s.n} реплик</span>`;
+    return `<div class="chat${cur===s.session_id?' on':''}" data-id="${esc(s.session_id)}">
+      <div class="t">${esc(s.title||'(без вопроса)')}</div>
+      <div class="m">${meta}</div></div>`;
+  }).join('');
 }
 async function open(id,title){
   cur=id;[...listEl.children].forEach(c=>c.classList.toggle('on',c.dataset.id===id));
-  mh.innerHTML=`<span>${esc(title)}</span>`;
-  const r=await fetch('/admin/api/session?token='+encodeURIComponent(token)+'&id='+encodeURIComponent(id));
+  const only=mode==='problems';
+  mh.innerHTML=`<span>${esc(title)}</span>`+(only?' <span class="sub">только проблемные сообщения</span>':'');
+  const r=await fetch('/admin/api/session?token='+encodeURIComponent(token)+'&id='+encodeURIComponent(id)+(only?'&problems_only=1':''));
   const d=await r.json();const msgs=d.messages||[];
   colEl.innerHTML=msgs.map(m=>{
     let srcs='';try{srcs=(JSON.parse(m.sources||'[]')).map(x=>x.source).filter(Boolean).join(', ');}catch(e){}
+    const isProb=(m.problematic||m.flagged);
+    const reason=m.problem_reason?`<div class="reason">⚑ ${esc(m.problem_reason)}</div>`:'';
     return `<div class="ts">${fmt(m.ts)}</div>
       <div class="row me"><div class="av me">Аб</div><div class="bub me">${esc(m.user_msg)}</div></div>
-      <div class="row"><div class="av ai">AI</div><div class="bub ai">${md(m.assistant_msg)}${srcs?`<div class="src">Источники: ${esc(srcs)}</div>`:''}<button class="flag ${m.flagged?'on':''}" data-id="${m.id}">${m.flagged?'⚑ помечено':'⚑ пометить'}</button></div></div>`;
+      <div class="row"><div class="av ai">AI</div><div class="bub ai${isProb?' prob':''}">${md(m.assistant_msg)}${srcs?`<div class="src">Источники: ${esc(srcs)}</div>`:''}${reason}<button class="flag ${m.flagged?'on':''}" data-id="${m.id}">${m.flagged?'⚑ снять пометку':'⚑ пометить'}</button></div></div>`;
   }).join('')||'<div class="empty">пусто</div>';
 }
-listEl.addEventListener('click',e=>{const c=e.target.closest('.chat');if(c){const s=all.find(x=>x.session_id===c.dataset.id);open(c.dataset.id,s?.title||'Диалог');}});
+listEl.addEventListener('click',e=>{const c=e.target.closest('.chat');if(c){const data=mode==='problems'?probs:all;const s=data.find(x=>x.session_id===c.dataset.id);open(c.dataset.id,s?.title||'Диалог');}});
 qEl.addEventListener('input',render);
-const tabChats=document.getElementById('tabChats'),tabProblems=document.getElementById('tabProblems');
-let mode='chats';
-function setTab(m){mode=m;tabChats.classList.toggle('on',m==='chats');tabProblems.classList.toggle('on',m==='problems');
-  if(m==='problems'){loadProblems();}else{mh.innerHTML='<span>Выберите диалог</span>';colEl.innerHTML='<div class="empty">← выберите диалог слева</div>';render();}}
+
+async function setTab(m){
+  mode=m;cur=null;
+  tabChats.classList.toggle('on',m==='chats');tabProblems.classList.toggle('on',m==='problems');
+  qEl.value='';qEl.placeholder=m==='problems'?'Поиск по проблемным…':'Поиск по чатам…';
+  mh.innerHTML='<span>'+(m==='problems'?'Выберите проблемный диалог':'Выберите диалог')+'</span>';
+  colEl.innerHTML='<div class="empty">← выберите диалог слева</div>';
+  if(m==='problems'&&!probsLoaded){await loadProblems();}
+  render();
+}
 tabChats.onclick=()=>setTab('chats');
 tabProblems.onclick=()=>setTab('problems');
 
 async function flagMsg(id,val,btn){
   try{await fetch('/admin/api/flag?token='+encodeURIComponent(token)+'&id='+id+'&flagged='+(val?1:0),{method:'POST'});}catch(e){}
-  if(btn){btn.classList.toggle('on',val);btn.textContent=val?'⚑ помечено':'⚑ пометить';}
-}
-async function loadProblems(){
-  mh.innerHTML='<span>Проблемные сообщения</span> <span class="sub">авто + помеченные, по всем чатам</span>';
-  const r=await fetch('/admin/api/problems?token='+encodeURIComponent(token));
-  if(!r.ok){colEl.innerHTML='<div class="empty">нет доступа</div>';return;}
-  const d=await r.json();const ps=d.problems||[];
-  if(!ps.length){colEl.innerHTML='<div class="empty">проблемных сообщений нет</div>';return;}
-  colEl.innerHTML=ps.map(m=>{
-    const tags=(m.problematic?'<span class="badge auto">авто</span>':'')+(m.flagged?'<span class="badge man">помечено</span>':'');
-    return `<div class="pitem"><div class="ph"><span class="tag">${esc(m.source)}</span>${tags}<span>${fmt(m.ts)}</span><span>· ${esc(m.session_id)}</span></div>
-      <div class="pu"><b>Вопрос:</b> ${esc(m.user_msg)}</div>
-      <div class="pa"><b>Ответ:</b> ${md(m.assistant_msg)}</div>
-      <button class="flag ${m.flagged?'on':''}" data-id="${m.id}">${m.flagged?'⚑ снять пометку':'⚑ пометить'}</button></div>`;
-  }).join('');
+  if(btn){btn.classList.toggle('on',val);btn.textContent=val?'⚑ снять пометку':'⚑ пометить';}
+  probsLoaded=false;   // membership may have changed -> refresh on next visit to «Проблемные»
 }
 colEl.addEventListener('click',e=>{const b=e.target.closest('.flag[data-id]');if(b){const id=b.dataset.id;const now=!b.classList.contains('on');flagMsg(id,now,b);}});
-
 
 load();
 </script>

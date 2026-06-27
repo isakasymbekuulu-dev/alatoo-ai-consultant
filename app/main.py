@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse, HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 
-from app import logging_store, riasec
+from app import feedback, logging_store, riasec
 from app.config import settings
 from app.llm import chat, chat_stream
 from app.rag import build_messages
@@ -181,13 +181,16 @@ async def chat_completions(
                 "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
             })
             yield "data: [DONE]\n\n"
-            logging_store.log_turn(session_id, source, last_user, "".join(acc), sources, consent)
+            answer = "".join(acc)
+            mid = logging_store.log_turn(session_id, source, last_user, answer, sources, consent)
+            feedback.review_turn_async(mid, session_id, last_user, answer)
 
         return StreamingResponse(gen(), media_type="text/event-stream",
                                  headers={"X-Retrieve-Ms": str(retrieve_ms)})
 
     answer = chat(messages, temperature=req.temperature)
-    logging_store.log_turn(session_id, source, last_user, answer, sources, consent)
+    mid = logging_store.log_turn(session_id, source, last_user, answer, sources, consent)
+    feedback.review_turn_async(mid, session_id, last_user, answer)
     return JSONResponse({
         "id": cid, "object": "chat.completion", "created": created, "model": model_name,
         "choices": [{"index": 0, "message": {"role": "assistant", "content": answer},
@@ -392,8 +395,10 @@ def admin_sessions(request: Request):
 
 
 @app.get("/admin/api/session")
-def admin_session(request: Request, id: str = Query(default="")):
+def admin_session(request: Request, id: str = Query(default=""), problems_only: int = Query(default=0)):
     admin_guard(request)
+    if problems_only:
+        return {"messages": logging_store.session_problems(id)}
     return {"messages": logging_store.session_messages(id)}
 
 
@@ -440,6 +445,12 @@ def admin_analytics(request: Request):
 def admin_problems(request: Request):
     admin_guard(request)
     return {"problems": logging_store.problems(300)}
+
+
+@app.get("/admin/api/problem_sessions")
+def admin_problem_sessions(request: Request):
+    admin_guard(request)
+    return {"sessions": logging_store.problem_sessions(500)}
 
 
 @app.post("/admin/api/flag")

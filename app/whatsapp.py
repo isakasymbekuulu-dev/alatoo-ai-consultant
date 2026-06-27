@@ -221,7 +221,9 @@ def _answer_for(text: str, session_id: str) -> str:
         sources = [{"title": c.get("title", ""), "source": c.get("source", ""),
                     "source_url": c.get("source_url", ""),
                     "score": round(c.get("score", 0), 3)} for c in chunks]
-        logging_store.log_turn(session_id, "whatsapp", text, answer, sources, False)
+        mid = logging_store.log_turn(session_id, "whatsapp", text, answer, sources, False)
+        from app import feedback
+        feedback.review_turn_async(mid, session_id, text, answer)
     except Exception as e:  # noqa: BLE001 — never let logging break a reply
         log.warning("WhatsApp log_turn failed: %s", e)
     return answer

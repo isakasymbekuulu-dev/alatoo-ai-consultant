@@ -340,6 +340,33 @@ def _process(value: dict) -> None:
         _send_text(sender, reply)
 
 
+def _process_echoes(value: dict) -> None:
+    """WhatsApp Coexistence: a human agent replied from the normal WhatsApp Business
+    app (delivered as `smb_message_echoes`). Pause the bot for that chat (so it does
+    not talk over the human) and mirror the agent's message into our logs/console.
+    Only app-sent messages arrive here — our own Cloud API sends do NOT — so the bot
+    never pauses itself. The idle auto-handback (handoff_timeout_min) later resumes it.
+    """
+    for echo in value.get("message_echoes", []) or []:
+        mid = echo.get("id")
+        if mid:
+            if mid in _seen_set:
+                continue
+            _seen_set.add(mid)
+            _seen_ids.append(mid)
+        to = echo.get("to")
+        if not to:
+            continue
+        session_id = "wa-" + to
+        text = ""
+        if echo.get("type") == "text":
+            text = (echo.get("text") or {}).get("body", "")
+        handoff.ensure(session_id, "whatsapp", to)
+        handoff.take_over(session_id, operator="whatsapp-app")   # human replied from the app -> bot pauses
+        logging_store.log_turn(session_id, "whatsapp:operator", "",
+                               text or "[сообщение сотрудника из WhatsApp]", [], False)
+
+
 @router.get("/webhooks/whatsapp")
 def verify(hub_mode: str = Query("", alias="hub.mode"),
            hub_challenge: str = Query("", alias="hub.challenge"),
@@ -367,4 +394,6 @@ async def incoming(request: Request, background: BackgroundTasks):
             value = change.get("value") or {}
             if value.get("messages"):
                 background.add_task(_process, value)
+            elif change.get("field") == "smb_message_echoes" or value.get("message_echoes"):
+                background.add_task(_process_echoes, value)   # Coexistence: human agent replied from the app
     return JSONResponse({"ok": True})

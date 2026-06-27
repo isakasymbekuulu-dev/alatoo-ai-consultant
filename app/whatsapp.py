@@ -27,7 +27,7 @@ from fastapi import APIRouter, BackgroundTasks, Request, Query
 from fastapi.responses import PlainTextResponse, JSONResponse
 
 from app.config import settings
-from app import logging_store, riasec
+from app import logging_store, riasec, persona, stt, channels
 from app.graph import run_graph
 from app.llm import chat
 
@@ -42,14 +42,15 @@ _seen_set: set = set()
 _NON_TEXT_REPLY = ("Пока я понимаю только текстовые сообщения. "
                    "Напишите вопрос текстом — и я помогу.")
 
-WA_DIRECTIVE = (
-    "КАНАЛ: WhatsApp. Учитывай:\n"
-    "- Ты общаешься в WhatsApp, а не на сайте. НЕ советуй «обновить страницу», "
-    "«нажать Новый чат» или другие действия веб-интерфейса — их здесь нет.\n"
-    "- Чтобы пройти тест профориентации заново или начать диалог заново, пользователь "
-    "пишет «пройти тест заново» или «новый чат» — подскажи это, если он спрашивает, как начать сначала.\n"
-    "- Пиши простым текстом, без markdown-заголовков и таблиц. Ссылки давай как обычный URL.\n"
-    "Отвечай на языке пользователя."
+WA_COMMANDS = (
+    "Текстовые команды этого чата: чтобы пройти тест профориентации заново — напишите "
+    "«пройти тест заново»; чтобы начать диалог заново — «новый чат». "
+    "Подскажи это, если пользователь спрашивает, как начать сначала."
+)
+
+_VOICE_FAIL_REPLY = (
+    "Не удалось распознать голосовое сообщение. "
+    "Пожалуйста, напишите Ваш вопрос текстом — и я помогу."
 )
 
 _RESET_REPLY = (
@@ -157,6 +158,36 @@ def _send_text(to: str, text: str) -> None:
         log.error("WhatsApp send error: %s", e)
 
 
+# Register this channel's outbound sender so shared code (operator handoff,
+# escalation push) can deliver messages without importing this module.
+channels.register_sender("whatsapp", _send_text)
+
+
+def _download_media(media_id: str):
+    """Two-step Graph API media fetch: id -> signed url -> bytes."""
+    token = settings.whatsapp_token
+    meta = httpx.get("%s/%s" % (_graph_api(), media_id),
+                     headers={"Authorization": "Bearer " + token}, timeout=30).json()
+    url = meta.get("url")
+    mime = meta.get("mime_type", "audio/ogg")
+    blob = httpx.get(url, headers={"Authorization": "Bearer " + token}, timeout=60).content
+    return blob, mime
+
+
+def _transcribe_msg(msg: dict) -> str:
+    """Download a voice/audio message and transcribe it (ru/ky/en code-switching)."""
+    media = msg.get("audio") or msg.get("voice") or {}
+    media_id = media.get("id")
+    if not media_id:
+        return ""
+    try:
+        blob, _mime = _download_media(media_id)
+        return stt.transcribe(blob, filename="voice.ogg")
+    except Exception as e:  # noqa: BLE001
+        log.warning("WhatsApp voice transcription failed: %s", e)
+        return ""
+
+
 def _riasec_summary(session_id: str):
     """If this wa-user took the profiling test (result saved under their wa session),
     return a short summary so the bot can discuss it back in WhatsApp."""
@@ -215,7 +246,8 @@ def push_riasec_result(to: str, result: dict, lang: str = "ru", name=None) -> No
 def _answer_for(text: str, session_id: str) -> str:
     history = [{"role": "user", "content": text}]
     messages, chunks, intent, trace = run_graph(history, riasec_summary=_riasec_summary(session_id))
-    messages.insert(-1, {"role": "system", "content": WA_DIRECTIVE})   # WhatsApp role, before the final language directive
+    messages.insert(-1, {"role": "system", "content": persona.social_directive("whatsapp")})
+    messages.insert(-1, {"role": "system", "content": WA_COMMANDS})   # before the final language directive
     answer = _wa_format(chat(messages), session_id)
     try:
         sources = [{"title": c.get("title", ""), "source": c.get("source", ""),
@@ -246,21 +278,28 @@ def _process(value: dict) -> None:
         if not sender:
             continue
         session_id = "wa-" + sender
-        if msg.get("type") == "text":
+        mtype = msg.get("type")
+        if mtype == "text":
             text = (msg.get("text") or {}).get("body", "").strip()
+        elif mtype in ("audio", "voice"):
+            text = _transcribe_msg(msg)
             if not text:
+                _send_text(sender, _VOICE_FAIL_REPLY)
                 continue
-            low = text.lower()
-            if _is_retake(low):
-                logging_store.clear_riasec(session_id)
-                reply = _test_invite(session_id)
-            elif _is_reset(low):
-                logging_store.clear_riasec(session_id)
-                reply = _RESET_REPLY
-            else:
-                reply = _answer_for(text, session_id)
         else:
-            reply = _NON_TEXT_REPLY
+            _send_text(sender, _NON_TEXT_REPLY)
+            continue
+        if not text:
+            continue
+        low = text.lower()
+        if _is_retake(low):
+            logging_store.clear_riasec(session_id)
+            reply = _test_invite(session_id)
+        elif _is_reset(low):
+            logging_store.clear_riasec(session_id)
+            reply = _RESET_REPLY
+        else:
+            reply = _answer_for(text, session_id)
         _send_text(sender, reply)
 
 

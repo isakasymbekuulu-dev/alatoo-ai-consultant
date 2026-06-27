@@ -88,5 +88,23 @@ class Settings(BaseSettings):
     whatsapp_api_version: str = "v21.0"
     whatsapp_display_number: str = "15552030688"   # bot's dial number for the "back to WhatsApp" deep link (wa.me/<num>); update at production cutover
 
+    # --- Speech-to-text for voice messages on social channels ---
+    stt_enabled: bool = True
+    stt_base_url: str = "https://api.openai.com/v1"
+    stt_api_key: str = ""                 # OpenAI key for transcription (falls back to llm_api_key)
+    stt_model: str = "gpt-4o-transcribe"  # multilingual, handles ru/ky/en code-switching
+    stt_fallback_model: str = "whisper-1"
+    stt_max_mb: int = 24                  # ignore absurdly large media
+
+    # --- Social-bot persona + operator handoff/escalation ---
+    operator_phone: str = "+996 555 820 000"   # live operator the bot escalates to
+    admissions_hours: str = "пн–пт, 9:00–17:00"
+    operator_base_url: str = "https://chat.alatoogpt.xyz"   # deep links in staff push
+    # Optional staff escalation push. If a Telegram bot token + chat id are set,
+    # the bot pings staff when a conversation needs a human; else queue-only.
+    staff_telegram_bot_token: str = ""
+    staff_telegram_chat_id: str = ""
+    staff_notify_webhook: str = ""        # generic fallback: POST {"text": ...}
+
 
 settings = Settings()

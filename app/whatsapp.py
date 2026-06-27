@@ -27,7 +27,7 @@ from fastapi import APIRouter, BackgroundTasks, Request, Query
 from fastapi.responses import PlainTextResponse, JSONResponse
 
 from app.config import settings
-from app import logging_store, riasec, persona, stt, channels
+from app import logging_store, riasec, persona, stt, channels, handoff
 from app.graph import run_graph
 from app.llm import chat
 
@@ -290,6 +290,13 @@ def _process(value: dict) -> None:
             _send_text(sender, _NON_TEXT_REPLY)
             continue
         if not text:
+            continue
+        handoff.ensure(session_id, "whatsapp", sender, title=text)
+        if not handoff.is_bot_active(session_id):
+            # An operator is handling this conversation — record the inbound for
+            # the console and pull it back into the queue, but stay silent.
+            logging_store.log_turn(session_id, "whatsapp", text, "", [], False)
+            handoff.bump(session_id, unhandle=True)
             continue
         low = text.lower()
         if _is_retake(low):

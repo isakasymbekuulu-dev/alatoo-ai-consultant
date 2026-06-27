@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse, HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 
-from app import feedback, logging_store, riasec
+from app import channels, feedback, handoff, logging_store, riasec
 from app.config import settings
 from app.llm import chat, chat_stream
 from app.rag import build_messages
@@ -24,6 +24,7 @@ from app.whatsapp import router as whatsapp_router
 
 app = FastAPI(title="AlaToo AI Consultant")
 logging_store.init()
+handoff.init()
 
 app.add_middleware(
     CORSMiddleware,
@@ -458,6 +459,83 @@ def admin_flag(request: Request, id: int = Query(...), flagged: int = Query(defa
     admin_guard(request)
     logging_store.set_flag(id, bool(flagged))
     return {"ok": True}
+
+
+class OperatorSend(BaseModel):
+    id: str
+    text: str
+
+
+@app.get("/admin/api/operator/queue")
+def admin_op_queue(request: Request):
+    admin_guard(request)
+    return {"queue": handoff.queue(200), "counts": handoff.counts()}
+
+
+@app.get("/admin/api/operator/conversation")
+def admin_op_conversation(request: Request, id: str = Query(default="")):
+    admin_guard(request)
+    return {"conversation": handoff.get(id), "messages": logging_store.session_messages(id)}
+
+
+@app.post("/admin/api/operator/take")
+def admin_op_take(request: Request, id: str = Query(...), operator: str = Query(default="")):
+    admin_guard(request)
+    handoff.take_over(id, operator)
+    return {"ok": True, "conversation": handoff.get(id)}
+
+
+@app.post("/admin/api/operator/release")
+def admin_op_release(request: Request, id: str = Query(...)):
+    admin_guard(request)
+    handoff.release_to_bot(id)
+    return {"ok": True, "conversation": handoff.get(id)}
+
+
+@app.post("/admin/api/operator/send")
+def admin_op_send(request: Request, body: OperatorSend):
+    admin_guard(request)
+    sid = (body.id or "").strip()
+    text = (body.text or "").strip()
+    if not sid or not text:
+        raise HTTPException(status_code=422, detail="id and text required")
+    conv = handoff.get(sid)
+    if not conv or conv.get("mode") != "human":
+        handoff.take_over(sid, "operator")   # operator reply implies takeover
+    ok = channels.send_to_session(sid, text)
+    logging_store.log_turn(sid, channels.channel_of(sid) + ":operator", "", text, [], False)
+    return {"ok": ok}
+
+
+@app.post("/admin/api/operator/handled")
+def admin_op_handled(request: Request, id: str = Query(...), handled: int = Query(default=1)):
+    admin_guard(request)
+    handoff.mark_handled(id, bool(handled))
+    return {"ok": True}
+
+
+@app.post("/admin/api/operator/priority")
+def admin_op_priority(request: Request, id: str = Query(...), priority: int = Query(default=0)):
+    admin_guard(request)
+    handoff.set_priority(id, priority)
+    return {"ok": True}
+
+
+@app.post("/admin/api/operator/flag")
+def admin_op_flag(request: Request, id: str = Query(...), reason: str = Query(default=""), priority: int = Query(default=1)):
+    admin_guard(request)
+    handoff.flag(id, reason=reason, priority=priority, auto=False)
+    return {"ok": True}
+
+
+@app.get("/admin/operator", response_class=HTMLResponse)
+def admin_operator_page(request: Request):
+    if not _authed(request):
+        return RedirectResponse("/admin", status_code=302)
+    page = STATIC_DIR / "operator.html"
+    if page.exists():
+        return HTMLResponse(page.read_text(encoding="utf-8"))
+    return HTMLResponse("<p>operator.html not found</p>", status_code=404)
 
 
 @app.get("/admin/graph", response_class=HTMLResponse)

@@ -14,7 +14,7 @@ import json
 import logging
 import threading
 
-from app import logging_store
+from app import channels, handoff, logging_store, notify
 from app.llm import chat
 
 log = logging.getLogger("alatoo.feedback")
@@ -35,13 +35,21 @@ _SYS = """Ты — модератор качества чат-бота приё�
 НЕ проблемное: обычный вопрос с нормальным содержательным ответом по существу;
 благодарность; уточняющий вопрос; приветствие.
 
+Также реши, нужен ли ЖИВОЙ сотрудник (оператор) — needs_human=true, если:
+- жалоба, конфликт, тревожный или негативный тон;
+- индивидуальные скидки/гранты, статус документов/заявления, оплата/рассрочка/возврат,
+  перевод из другого вуза / восстановление;
+- любой вопрос, на который у бота явно нет точного ответа.
+priority: "urgent" (конфликт/жалоба/сильная тревога), "high" (нужен человек, тема чувствительная),
+"normal" (обычная передача), "low".
+
 Верни СТРОГО JSON одной строкой, без markdown и пояснений:
-{"problematic": true|false, "target": "current"|"previous"|"both", "reason": "<кратко, по-русски>"}
+{"problematic": true|false, "target": "current"|"previous"|"both", "reason": "<кратко, по-русски>", "needs_human": true|false, "priority": "low"|"normal"|"high"|"urgent"}
 Где target:
 - "current"  — проблема в текущем ответе бота;
 - "previous" — пользователь жалуется на ПРЕДЫДУЩИЙ ответ (текущая реплика — сама жалоба);
 - "both"     — проблема и в текущем, и в предыдущем.
-Если problematic=false — target и reason можно оставить пустыми."""
+Если problematic=false — target можно оставить пустым; reason заполняй, если needs_human=true."""
 
 
 def _parse_json(raw: str) -> dict:
@@ -69,18 +77,35 @@ def _classify(user_msg, assistant_msg, prev_assistant_msg) -> dict:
     return _parse_json(raw)
 
 
+_PRIORITY = {"urgent": 2, "high": 1, "normal": 0, "low": 0}
+
+
+def _escalate(session_id, reason, priority) -> None:
+    """Raise the conversation to the operator queue and ping staff (once).
+    Only for messenger channels — the web chat has no operator outbound path."""
+    channel = channels.channel_of(session_id)
+    if channel == "web":
+        return
+    prio = _PRIORITY.get((priority or "normal").lower(), 0)
+    is_new = handoff.flag(session_id, reason=reason, priority=prio, auto=True,
+                          channel=channel, recipient=channels.recipient_of(session_id))
+    if is_new:
+        notify.notify_staff(notify.escalation_message(session_id, channel, reason, prio))
+
+
 def _review_turn(message_id, session_id, user_msg, assistant_msg) -> None:
     try:
         prev_id, prev_assistant = logging_store.prev_turn(session_id, message_id)
         verdict = _classify(user_msg, assistant_msg, prev_assistant)
-        if not verdict.get("problematic"):
-            return
         reason = (verdict.get("reason") or "").strip()[:300]
-        target = (verdict.get("target") or "current").lower()
-        if target in ("current", "both"):
-            logging_store.mark_problematic(message_id, reason)
-        if target in ("previous", "both") and prev_id:
-            logging_store.mark_problematic(prev_id, reason or "Жалоба на этот ответ")
+        if verdict.get("problematic"):
+            target = (verdict.get("target") or "current").lower()
+            if target in ("current", "both"):
+                logging_store.mark_problematic(message_id, reason)
+            if target in ("previous", "both") and prev_id:
+                logging_store.mark_problematic(prev_id, reason or "Жалоба на этот ответ")
+        if verdict.get("needs_human"):
+            _escalate(session_id, reason, verdict.get("priority"))
     except Exception as e:  # noqa: BLE001 — best-effort; must never affect the chat
         log.warning("feedback review failed: %s", str(e)[:200])
 

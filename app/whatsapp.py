@@ -48,6 +48,15 @@ WA_COMMANDS = (
     "Подскажи это, если пользователь спрашивает, как начать сначала."
 )
 
+_CONTINUITY = (
+    "ВАЖНО: это ПРОДОЛЖЕНИЕ уже идущего диалога с этим пользователем — выше дана история "
+    "вашей переписки. Опирайся на неё. НЕ здоровайся и НЕ представляйся заново. НИКОГДА не "
+    "отвечай, что «не помнишь предыдущие сообщения» или «не можешь хранить историю» — ты "
+    "видишь историю переписки выше и обязан её учитывать (например, помнишь, что человек "
+    "уже писал и о чём шла речь)."
+)
+
+
 _VOICE_FAIL_REPLY = (
     "Не удалось распознать голосовое сообщение. "
     "Пожалуйста, напишите Ваш вопрос текстом — и я помогу."
@@ -265,10 +274,13 @@ def _answer_for(text: str, session_id: str) -> str:
     # WhatsApp is stateless per webhook call -> rebuild memory from the logs. We pull
     # a generous slice; the token-based window (rag.trim_history / max_history_tokens)
     # then trims it to the same budget the web chat uses.
-    history = logging_store.recent_history(session_id, limit=settings.max_history_messages)
+    prior = logging_store.recent_history(session_id, limit=settings.max_history_messages)
+    history = list(prior)
     history.append({"role": "user", "content": text})
     messages, chunks, intent, trace = run_graph(history, riasec_summary=_riasec_summary(session_id))
     messages.insert(-1, {"role": "system", "content": persona.social_directive("whatsapp")})
+    if prior:   # continuing conversation -> don't re-greet, don't deny memory
+        messages.insert(-1, {"role": "system", "content": _CONTINUITY})
     messages.insert(-1, {"role": "system", "content": WA_COMMANDS})   # before the final language directive
     answer = _wa_format(chat(messages), session_id)
     try:
